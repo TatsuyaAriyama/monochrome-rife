@@ -58,12 +58,146 @@ button:disabled {
 
 .home-screen,
 .login-screen,
+.intro-screen,
 .travel-screen,
 .panel-screen,
 .game-screen {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
+}
+
+.intro-screen {
+  display: grid;
+  place-items: center;
+  background: #050505;
+}
+
+.intro-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 68px,
+      rgba(255, 255, 255, 0.055) 69px,
+      transparent 70px
+    ),
+    radial-gradient(circle at 50% 54%, rgba(255, 255, 255, 0.05), transparent 28%);
+  opacity: 0.65;
+  animation: introNoise 2.8s steps(4) infinite;
+}
+
+.intro-staff {
+  position: absolute;
+  inset: 18% 0;
+  opacity: 0.34;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 19px,
+      rgba(255, 255, 255, 0.16) 20px,
+      transparent 21px
+    );
+  transform: translateY(24px);
+  animation: introStaffDrift 16.6s ease-in-out forwards;
+}
+
+.intro-particles span {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.24);
+  opacity: 0;
+  animation: introParticle 5.2s ease-in-out infinite;
+}
+
+.intro-metronome {
+  position: absolute;
+  left: 50%;
+  top: 53%;
+  width: 82px;
+  height: 122px;
+  transform: translate(-50%, -50%);
+  opacity: 0.14;
+}
+
+.intro-metronome::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  clip-path: polygon(50% 0, 79% 100%, 21% 100%);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.intro-metronome i {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  width: 1px;
+  height: 92px;
+  transform-origin: 50% 0;
+  background: rgba(255, 255, 255, 0.84);
+  animation: introPendulum 1.88s ease-in-out infinite;
+}
+
+.intro-metronome i::after {
+  content: "";
+  position: absolute;
+  left: -5px;
+  bottom: -5px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.intro-copy {
+  position: relative;
+  z-index: 1;
+  width: min(760px, calc(100% - 40px));
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.intro-line {
+  position: absolute;
+  max-width: min(680px, calc(100vw - 48px));
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 17px;
+  line-height: 2.1;
+  font-weight: 300;
+  opacity: 0;
+  animation: introLine 3.4s ease-in-out forwards;
+}
+
+.intro-copy h1 {
+  position: absolute;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 52px;
+  line-height: 1;
+  font-weight: 250;
+  opacity: 0;
+  text-shadow: 0 0 28px rgba(255, 255, 255, 0.2);
+  animation: introTitle 3.1s ease-in-out 13.25s forwards;
+}
+
+.intro-skip {
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  min-width: 86px;
+  min-height: 38px;
+  opacity: 0.62;
 }
 
 .travel-screen {
@@ -896,6 +1030,91 @@ p {
   }
 }
 
+@keyframes introNoise {
+  50% {
+    opacity: 0.42;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes introStaffDrift {
+  0% {
+    opacity: 0.1;
+    transform: translateY(26px) scale(1);
+  }
+  38%,
+  78% {
+    opacity: 0.36;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-42px) scale(1.06);
+  }
+}
+
+@keyframes introParticle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  35%,
+  70% {
+    opacity: 0.76;
+  }
+  100% {
+    transform: translate3d(18px, -44px, 0);
+  }
+}
+
+@keyframes introPendulum {
+  0%,
+  100% {
+    transform: rotate(-18deg);
+  }
+  50% {
+    transform: rotate(18deg);
+  }
+}
+
+@keyframes introLine {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(2px);
+  }
+  18%,
+  76% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+    filter: blur(2px);
+  }
+}
+
+@keyframes introTitle {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+    filter: blur(3px);
+  }
+  35%,
+  82% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px) scale(1.01);
+    filter: blur(2px);
+  }
+}
+
 @keyframes travelStaff {
   from {
     transform: translateY(0) scale(1);
@@ -989,6 +1208,20 @@ p {
 
   .login-brand h1 {
     font-size: 40px;
+  }
+
+  .intro-copy h1 {
+    font-size: 36px;
+  }
+
+  .intro-line {
+    font-size: 14px;
+    line-height: 1.9;
+  }
+
+  .intro-metronome {
+    width: 64px;
+    height: 96px;
   }
 
   .travel-copy h1 {

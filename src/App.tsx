@@ -18,6 +18,7 @@ type Screen =
   | "account"
   | "home"
   | "stageSelect"
+  | "intro"
   | "travel"
   | "game"
   | "customize"
@@ -520,13 +521,13 @@ class MonochromeAudio {
   private bgmTimer = 0;
   private step = 0;
   private lastHit = 0;
-  private mode: "home" | "game" = "game";
+  private mode: "home" | "intro" | "game" = "game";
   private stageIndex = 0;
   private bossLayer = false;
   private bossIntensity = 0;
   private settings: Settings = DEFAULT_SETTINGS;
 
-  async start(settings: Settings, mode: "home" | "game" = "game", stageIndex = 0) {
+  async start(settings: Settings, mode: "home" | "intro" | "game" = "game", stageIndex = 0) {
     this.ensure();
     if (this.mode !== mode || this.stageIndex !== stageIndex) {
       this.stop();
@@ -679,6 +680,7 @@ class MonochromeAudio {
   }
 
   private bgmInterval() {
+    if (this.mode === "intro") return 940;
     if (this.mode === "home") return 760;
     if (this.stageIndex === 2 && this.bossLayer) {
       return this.bossIntensity >= 2 ? 158 : this.bossIntensity === 1 ? 205 : 340;
@@ -691,6 +693,11 @@ class MonochromeAudio {
     if (!this.context || !this.bgm) return;
     if (this.mode === "home") {
       this.playHomePianoStep();
+      return;
+    }
+    if (this.mode === "intro") {
+      this.playIntroStoryStep();
+      this.step += 1;
       return;
     }
     this.playStageBgmStep();
@@ -777,6 +784,20 @@ class MonochromeAudio {
       if (note % 4 === 2) this.tone(880, 0.05, 0.024, "square", this.delay, 0.06);
       if (note === 6 || note === 14) this.noise(0.1, 0.026 + intensity * 0.012, 1300, this.bgm);
       if (intensity > 1 && note % 5 === 0) this.tone(349.23, 0.08, 0.022, "sawtooth", this.bgm, 0.05);
+    }
+  }
+
+  private playIntroStoryStep() {
+    if (!this.bgm) return;
+    const index = this.step;
+    const beat = index % 4;
+    const distantTick = beat === 0 ? 880 : 660;
+    this.tone(distantTick, 0.025, beat === 0 ? 0.034 : 0.019, "square", this.bgm);
+    this.tone(49, 1.35, 0.038, "sine", this.bgm);
+    if (index % 2 === 0) this.noise(0.22, 0.013, 620, this.bgm);
+    if (index === 2 || index === 7 || index === 11) {
+      const notes = [220, 277.18, 196];
+      this.pianoTone(notes[index % notes.length], 1.2, 0.03, this.delay, 0.06);
     }
   }
 
@@ -994,6 +1015,10 @@ function App() {
   }, [settings]);
 
   useEffect(() => {
+    if (screen === "intro") {
+      void audioEngine.start(settings, "intro");
+      return;
+    }
     if (screen === "game" || screen === "travel") return;
     void audioEngine.start(settings, "home");
     const unlockHomeBgm = () => {
@@ -1163,7 +1188,20 @@ function App() {
           onStart={(stageIndex) => {
             setSelectedStage(stageIndex);
             incrementPlayCount();
+            if (stageIndex === 0) {
+              setScreen("intro");
+              return;
+            }
             void audioEngine.start(settings, "game", stageIndex);
+            setScreen("travel");
+          }}
+        />
+      )}
+      {screen === "intro" && (
+        <IntroStoryScreen
+          onComplete={() => {
+            setSelectedStage(0);
+            void audioEngine.start(settings, "game", 0);
             setScreen("travel");
           }}
         />
@@ -1407,6 +1445,57 @@ function StageSelectScreen({
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function IntroStoryScreen({ onComplete }: { onComplete: () => void }) {
+  const lines = [
+    "この世界は、音によって保たれていた。",
+    "拍は時間を刻み、旋律は記憶を繋ぎ、休符は静寂を守っていた。",
+    "だが、ある日を境に、音は止まらなくなった。",
+    "崩れたリズムは、世界そのものを歪ませていく。",
+    "残されたのは、壊れた音と、失われた“Riff”だけ。",
+  ];
+
+  useEffect(() => {
+    const timer = window.setTimeout(onComplete, 16600);
+    return () => window.clearTimeout(timer);
+  }, [onComplete]);
+
+  return (
+    <section className="intro-screen">
+      <div className="intro-staff" aria-hidden="true" />
+      <div className="intro-particles" aria-hidden="true">
+        {Array.from({ length: 46 }).map((_, index) => (
+          <span
+            key={index}
+            style={{
+              left: `${(index * 37) % 100}%`,
+              top: `${(index * 19) % 100}%`,
+              animationDelay: `${(index % 11) * 0.28}s`,
+            }}
+          />
+        ))}
+      </div>
+      <div className="intro-metronome" aria-hidden="true">
+        <i />
+      </div>
+      <div className="intro-copy">
+        {lines.map((line, index) => (
+          <p
+            className="intro-line"
+            key={line}
+            style={{ animationDelay: `${0.8 + index * 2.45}s` }}
+          >
+            {line}
+          </p>
+        ))}
+        <h1>MONOCHROME RIFF</h1>
+      </div>
+      <button className="intro-skip" onClick={onComplete}>
+        Enter
+      </button>
     </section>
   );
 }
