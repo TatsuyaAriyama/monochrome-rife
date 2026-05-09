@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.deploy-pages/
 .DS_Store
 *.tsbuildinfo
 vite.config.js
