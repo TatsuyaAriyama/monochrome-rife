@@ -29,6 +29,7 @@ export type UserSaveData = {
 };
 
 const STARTER_ITEM = "starter-tuning-fork";
+const STAGE_COUNT = 4;
 
 const DEFAULT_EQUIPMENT: EquippedItems = {
   weapon: STARTER_ITEM,
@@ -45,8 +46,8 @@ export function createDefaultUserData(email: string): UserSaveData {
     highestStage: 1,
     highScore: 0,
     playCount: 0,
-    clearedStages: [false, false, false],
-    stageHighScores: [0, 0, 0],
+    clearedStages: Array.from({ length: STAGE_COUNT }, () => false),
+    stageHighScores: Array.from({ length: STAGE_COUNT }, () => 0),
   };
 }
 
@@ -97,13 +98,15 @@ function normalizeUserData(email: string, saved: Partial<UserSaveData>): UserSav
       false,
       false,
       false,
-    ].slice(0, 3),
+      false,
+    ].slice(0, STAGE_COUNT),
     stageHighScores: [
       ...(saved.stageHighScores ?? fallback.stageHighScores),
       0,
       0,
       0,
-    ].slice(0, 3),
+      0,
+    ].slice(0, STAGE_COUNT),
     createdAt: saved.createdAt,
     updatedAt: saved.updatedAt,
   };
