@@ -547,6 +547,14 @@ class MonochromeAudio {
     }
   }
 
+  resumeGameLayer(stageIndex: number, bossLayer = false) {
+    this.stageIndex = stageIndex;
+    this.bossLayer = bossLayer;
+    this.mode = "game";
+    this.step = 0;
+    if (!this.bgmTimer) this.startBgm();
+  }
+
   stop() {
     window.clearInterval(this.bgmTimer);
     this.bgmTimer = 0;
@@ -2274,14 +2282,13 @@ function GameScreen({
     state.bannerText = stage.boss;
     state.bannerClock = 2.4;
     state.shake = 2;
-    audioRef.current.setGameStage(state.stageIndex, true);
-    audioRef.current.boss();
     if (state.stageIndex === 2) {
       const introBossId = state.boss.id;
       state.freezeClock = 1.65;
       state.freezeCooldown = 8.4;
       state.freezeReason = "intro";
       state.bannerText = "";
+      audioRef.current.stop();
       [0, 820, 1180, 1540].forEach((delay, index) => {
         window.setTimeout(() => {
           const live = stateRef.current;
@@ -2290,6 +2297,15 @@ function GameScreen({
           }
         }, delay);
       });
+      window.setTimeout(() => {
+        const live = stateRef.current;
+        if (live && live.boss?.id === introBossId && !live.gameOver) {
+          audioRef.current.resumeGameLayer(state.stageIndex, true);
+        }
+      }, 1680);
+    } else {
+      audioRef.current.setGameStage(state.stageIndex, true);
+      audioRef.current.boss();
     }
   }
 
@@ -2373,6 +2389,14 @@ function GameScreen({
       fireStageTwoBoss(state, boss, enrage);
     } else {
       fireStageThreeBoss(state, boss, enrage);
+      if (enrage > 0) {
+        [170, enrage > 1 ? 290 : 360].forEach((delay) => {
+          window.setTimeout(() => {
+            const live = stateRef.current;
+            if (live?.boss?.id === boss.id && !live.gameOver) audioRef.current.metronomeTick(false);
+          }, delay);
+        });
+      }
     }
     addRipple(state, boss.x, boss.y, 96 + enrage * 20, "wave");
   }
@@ -3790,6 +3814,10 @@ function drawBoss(
     drawWaveBoss(ctx, boss, elapsed, enrage, telegraphProgress, noise);
     return;
   }
+  if (boss.phase === 5) {
+    drawMetronomeBoss(ctx, boss, state, elapsed, enrage, telegraphProgress, noise);
+    return;
+  }
 
   ctx.save();
   ctx.translate(
@@ -3970,6 +3998,108 @@ function drawBoss(
       ctx.stroke();
     }
   }
+  ctx.restore();
+}
+
+function drawMetronomeBoss(
+  ctx: CanvasRenderingContext2D,
+  boss: Boss,
+  state: GameState,
+  elapsed: number,
+  enrage: number,
+  telegraphProgress: number,
+  noise: number,
+) {
+  const w = boss.radius * 1.48;
+  const h = boss.radius * 2.42;
+  const swingRate = 1.55 + enrage * 0.42 + telegraphProgress * 0.3;
+  const brokenPulse = enrage > 0 ? Math.sin(elapsed * (5.2 + enrage) + boss.rhythmIndex) * enrage * 0.055 : 0;
+  const swing = Math.sin(elapsed * swingRate + boss.rhythmIndex * 0.38) * (0.46 + enrage * 0.08) + brokenPulse;
+  const charge = telegraphProgress * (1 + enrage * 0.25);
+
+  ctx.save();
+  ctx.translate(
+    boss.x + Math.sin(elapsed * 19 + boss.id) * noise * 0.32,
+    boss.y + Math.cos(elapsed * 17 + boss.rhythmIndex) * noise * 0.22,
+  );
+  ctx.rotate(Math.sin(elapsed * 0.38) * 0.018 + charge * 0.012);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.shadowColor = "rgba(255,255,255,0.48)";
+  ctx.shadowBlur = 12 + enrage * 4 + charge * 10;
+  ctx.fillStyle = `rgba(255,255,255,${0.035 + enrage * 0.012 + charge * 0.02})`;
+  ctx.strokeStyle = `rgba(255,255,255,${0.88 + charge * 0.08})`;
+  ctx.lineWidth = 2.6;
+
+  ctx.beginPath();
+  ctx.moveTo(0, -h * 0.58);
+  ctx.quadraticCurveTo(-w * 0.48, -h * 0.16, -w * 0.58, h * 0.44);
+  ctx.quadraticCurveTo(0, h * 0.56, w * 0.58, h * 0.44);
+  ctx.quadraticCurveTo(w * 0.48, -h * 0.16, 0, -h * 0.58);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.15 + enrage * 0.04})`;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 7; i += 1) {
+    const y = -h * 0.32 + i * h * 0.12;
+    const bend = Math.sin(elapsed * 0.55 + i) * (1.4 + enrage);
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.34, y + bend);
+    ctx.quadraticCurveTo(0, y - bend * 0.6, w * 0.34, y + bend * 0.42);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.32 + charge * 0.22})`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.34, h * 0.38);
+  ctx.lineTo(w * 0.34, h * 0.38);
+  ctx.stroke();
+
+  ctx.save();
+  ctx.rotate(swing);
+  ctx.strokeStyle = `rgba(255,255,255,${0.82 + charge * 0.12})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -h * 0.38);
+  ctx.lineTo(0, h * 0.36);
+  ctx.stroke();
+
+  ctx.fillStyle = `rgba(255,255,255,${0.7 + charge * 0.16})`;
+  ctx.beginPath();
+  ctx.ellipse(0, h * 0.4, 7 + enrage * 1.5, 9 + enrage * 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.4 + charge * 0.28})`;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(0, -h * 0.4, 5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  if (telegraphProgress > 0) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.16 + charge * 0.34})`;
+    ctx.lineWidth = 1.2;
+    const scanY = -h * 0.5 + h * telegraphProgress;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.48, scanY);
+    ctx.lineTo(w * 0.48, scanY + Math.sin(elapsed * 8) * 2);
+    ctx.stroke();
+  }
+
+  if (state.freezeClock > 0) {
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.72, 0);
+    ctx.lineTo(w * 0.72, 0);
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
