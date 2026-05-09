@@ -987,16 +987,34 @@ function migrateLegacyLocalSave(data: UserSaveData) {
   const legacyEquipment = readJson<Partial<Equipment>>(STORAGE_KEYS.equipment, {});
   const hasLegacyItems = legacyItems.length > 0;
   const hasLegacyEquipment = Object.keys(legacyEquipment).length > 0;
+  const normalized = normalizeProgress(data);
 
-  if (!hasLegacyItems && !hasLegacyEquipment) return data;
+  if (!hasLegacyItems && !hasLegacyEquipment) return normalized;
+
+  return {
+    ...normalized,
+    ownedItems: Array.from(new Set([...normalized.ownedItems, STARTER_ITEM, ...legacyItems])),
+    equippedItems: {
+      ...normalized.equippedItems,
+      ...legacyEquipment,
+    },
+  };
+}
+
+function normalizeProgress(data: UserSaveData): UserSaveData {
+  const clearedStages = [...data.clearedStages, ...STAGES.map(() => false)].slice(0, STAGES.length);
+  const stageHighScores = [...data.stageHighScores, ...STAGES.map(() => 0)].slice(0, STAGES.length);
+  const lastClearedIndex = clearedStages.reduce(
+    (latest, cleared, index) => (cleared ? index : latest),
+    -1,
+  );
+  const inferredHighestStage = Math.min(Math.max(lastClearedIndex + 2, 1), STAGES.length);
 
   return {
     ...data,
-    ownedItems: Array.from(new Set([...data.ownedItems, STARTER_ITEM, ...legacyItems])),
-    equippedItems: {
-      ...data.equippedItems,
-      ...legacyEquipment,
-    },
+    clearedStages,
+    stageHighScores,
+    highestStage: Math.max(data.highestStage, inferredHighestStage),
   };
 }
 
@@ -1479,7 +1497,14 @@ function StageSelectScreen({
   onBack: () => void;
   onStart: (stageIndex: number) => void;
 }) {
-  const maxPlayable = Math.min(Math.max(user.highestStage - 1, 0), STAGES.length - 1);
+  const lastClearedIndex = user.clearedStages.reduce(
+    (latest, cleared, index) => (cleared ? index : latest),
+    -1,
+  );
+  const maxPlayable = Math.min(
+    Math.max(user.highestStage - 1, lastClearedIndex + 1, 0),
+    STAGES.length - 1,
+  );
 
   return (
     <section className="panel-screen">
