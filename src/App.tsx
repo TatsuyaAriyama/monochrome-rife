@@ -519,6 +519,7 @@ class MonochromeAudio {
   private mode: "home" | "game" = "game";
   private stageIndex = 0;
   private bossLayer = false;
+  private bossIntensity = 0;
   private settings: Settings = DEFAULT_SETTINGS;
 
   async start(settings: Settings, mode: "home" | "game" = "game", stageIndex = 0) {
@@ -530,6 +531,7 @@ class MonochromeAudio {
     this.mode = mode;
     this.stageIndex = stageIndex;
     this.bossLayer = false;
+    this.bossIntensity = 0;
     this.setSettings(settings);
     if (!this.context) return;
     if (this.context.state === "suspended") await this.context.resume();
@@ -540,6 +542,7 @@ class MonochromeAudio {
     if (this.stageIndex === stageIndex && this.bossLayer === bossLayer) return;
     this.stageIndex = stageIndex;
     this.bossLayer = bossLayer;
+    this.bossIntensity = 0;
     this.step = 0;
     if (this.mode === "game" && this.bgmTimer) {
       this.stop();
@@ -553,6 +556,16 @@ class MonochromeAudio {
     this.mode = "game";
     this.step = 0;
     if (!this.bgmTimer) this.startBgm();
+  }
+
+  setBossIntensity(intensity: number) {
+    const next = clamp(Math.floor(intensity), 0, 2);
+    if (this.bossIntensity === next) return;
+    this.bossIntensity = next;
+    if (this.mode === "game" && this.stageIndex === 2 && this.bossLayer && this.bgmTimer) {
+      this.stop();
+      this.startBgm();
+    }
   }
 
   stop() {
@@ -647,10 +660,16 @@ class MonochromeAudio {
   private startBgm() {
     if (!this.context || this.bgmTimer) return;
     this.playBgmStep();
-    this.bgmTimer = window.setInterval(
-      () => this.playBgmStep(),
-      this.mode === "home" ? 760 : this.stageIndex === 2 ? 860 : this.stageIndex === 1 ? 430 : 640,
-    );
+    this.bgmTimer = window.setInterval(() => this.playBgmStep(), this.bgmInterval());
+  }
+
+  private bgmInterval() {
+    if (this.mode === "home") return 760;
+    if (this.stageIndex === 2 && this.bossLayer) {
+      return this.bossIntensity >= 2 ? 172 : this.bossIntensity === 1 ? 205 : 260;
+    }
+    if (this.stageIndex === 2) return 860;
+    return this.stageIndex === 1 ? 430 : 640;
   }
 
   private playBgmStep() {
@@ -686,14 +705,62 @@ class MonochromeAudio {
       return;
     }
 
+    if (this.bossLayer) {
+      this.playBrokenMetronomeBossStep(index);
+      return;
+    }
+
     const drone = [41.2, 49, 55, 49];
     const note = index % drone.length;
     this.tone(drone[note], 1.6, this.bossLayer ? 0.08 : 0.055, "sine", this.bgm);
     if (note === 1) this.tone(196, 1.2, 0.026, "sine", this.delay, 0.2);
     if (note === 3) this.noise(0.34, this.bossLayer ? 0.044 : 0.026, 720, this.bgm);
-    if (this.bossLayer) {
-      this.tone(note === 0 ? 880 : 660, 0.028, note === 0 ? 0.045 : 0.026, "square", this.bgm, 0.02);
-      if (note === 2) this.pianoTone(220, 1.1, 0.026, this.delay, 0.12);
+  }
+
+  private playBrokenMetronomeBossStep(index: number) {
+    const phrase = [
+      587.33,
+      523.25,
+      587.33,
+      698.46,
+      659.25,
+      587.33,
+      440,
+      523.25,
+      587.33,
+      523.25,
+      440,
+      392,
+      440,
+      523.25,
+      587.33,
+      0,
+    ];
+    const bass = [73.42, 0, 73.42, 87.31, 98, 0, 87.31, 73.42];
+    const note = index % phrase.length;
+    const beat = index % 4;
+    const intensity = this.bossIntensity;
+
+    this.tone(beat === 0 ? 980 : 760, 0.026, beat === 0 ? 0.038 : 0.024, "square", this.bgm);
+
+    const melody = phrase[note];
+    if (melody) {
+      this.tone(melody, 0.15, intensity > 0 ? 0.065 : 0.052, "square", this.bgm, 0.012);
+      this.tone(melody * 2, 0.06, 0.016 + intensity * 0.006, "triangle", this.delay, 0.018);
+    }
+
+    const bassNote = bass[index % bass.length];
+    if (bassNote) {
+      this.tone(bassNote, intensity > 0 ? 0.36 : 0.44, intensity > 0 ? 0.105 : 0.072, "sine", this.bgm);
+    }
+
+    if (note === 0 || note === 8) this.pianoTone(293.66, 0.55, 0.035 + intensity * 0.009, this.delay, 0.04);
+    if (note === 4 || note === 12) this.pianoTone(220, 0.62, 0.026 + intensity * 0.007, this.bgm, 0.02);
+
+    if (intensity > 0) {
+      if (note % 4 === 2) this.tone(783.99, 0.045, 0.026, "square", this.delay, 0.07);
+      if (note === 6 || note === 14) this.noise(0.09, 0.026 + intensity * 0.012, 1400, this.bgm);
+      if (intensity > 1 && note % 5 === 0) this.tone(349.23, 0.07, 0.025, "sawtooth", this.bgm, 0.05);
     }
   }
 
@@ -2315,6 +2382,7 @@ function GameScreen({
     const boss = state.boss;
     const hpRatio = boss.hp / boss.maxHp;
     const enrage = hpRatio < 0.25 ? 2 : hpRatio < 0.5 ? 1 : 0;
+    if (state.stageIndex === 2) audioRef.current.setBossIntensity(enrage);
     const time = state.bossElapsed;
     const motionScale = boss.phase === 5 ? 0.72 : 1;
     const targetX =
