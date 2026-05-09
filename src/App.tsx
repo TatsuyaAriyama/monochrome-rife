@@ -2243,7 +2243,7 @@ function GameScreen({
 
   function spawnBoss(state: GameState) {
     const stage = STAGES[state.stageIndex];
-    const baseHp = [1380, 1880, 3050][state.stageIndex];
+    const baseHp = [1720, 2450, 3050][state.stageIndex];
     const maxHp = baseHp + (state.runLoop - 1) * 360;
     state.boss = {
       id: state.nextId++,
@@ -2358,8 +2358,11 @@ function GameScreen({
   }
 
   function chooseBossPattern(state: GameState, boss: Boss, enrage: number) {
-    if (state.stageIndex === 0) return boss.rhythmIndex % 3 === 2 && enrage > 0 ? 1 : 0;
-    if (state.stageIndex === 1) return boss.rhythmIndex % 4;
+    if (state.stageIndex === 0) {
+      if (boss.rhythmIndex % 4 === 3) return 2;
+      return boss.rhythmIndex % 3 === 2 && enrage > 0 ? 1 : 0;
+    }
+    if (state.stageIndex === 1) return boss.rhythmIndex % 5 === 4 ? 4 : boss.rhythmIndex % 4;
     return boss.rhythmIndex % 3;
   }
 
@@ -2375,6 +2378,10 @@ function GameScreen({
   }
 
   function fireStageOneBoss(state: GameState, boss: Boss, enrage: number) {
+    if (boss.pattern === 2) {
+      fireWaveWall(state, boss, 126 + enrage * 16, 9);
+      return;
+    }
     if (boss.pattern === 1) {
       const offsets = enrage > 0 ? [-0.38, -0.19, 0, 0.19, 0.38] : [-0.28, -0.1, 0.1, 0.28];
       offsets.forEach((offset, index) => {
@@ -2403,6 +2410,10 @@ function GameScreen({
   }
 
   function fireStageTwoBoss(state: GameState, boss: Boss, enrage: number) {
+    if (boss.pattern === 4) {
+      fireWaveWall(state, boss, 148 + enrage * 20, 10);
+      return;
+    }
     if (boss.pattern === 0) {
       const offsets = enrage > 0 ? [-0.5, -0.3, -0.11, 0.11, 0.3, 0.5] : [-0.42, -0.22, 0.22, 0.42];
       offsets.forEach((offset) => {
@@ -2470,6 +2481,16 @@ function GameScreen({
         }
       }, delay);
     });
+  }
+
+  function fireWaveWall(state: GameState, boss: Boss, speed: number, damage: number) {
+    const y = boss.y + boss.radius * 1.35;
+    const spacing = 26;
+    const drift = Math.sin(boss.rhythmIndex) * 8;
+    for (let x = -spacing; x <= state.width + spacing; x += spacing) {
+      spawnWaveHazard(state, x + drift, y, Math.PI / 2, speed, 12.5, damage);
+    }
+    state.shake = settings.reducedMotion ? 0 : 0.7;
   }
 
   function spawnBossLaser(
@@ -3169,6 +3190,11 @@ function drawBossTelegraph(
   ctx.stroke();
 
   if (state.stageIndex === 0) {
+    if (boss.pattern === 2) {
+      drawWaveWallTelegraph(ctx, state, boss, alpha, 24);
+      ctx.restore();
+      return;
+    }
     const offsets = boss.pattern === 1 ? [-0.24, 0, 0.24] : [0];
     offsets.forEach((offset) =>
       drawTelegraphLine(
@@ -3182,7 +3208,9 @@ function drawBossTelegraph(
       ),
     );
   } else if (state.stageIndex === 1) {
-    if (boss.pattern === 1) {
+    if (boss.pattern === 4) {
+      drawWaveWallTelegraph(ctx, state, boss, alpha, 26);
+    } else if (boss.pattern === 1) {
       const lanes = [0.22, 0.38, 0.54, 0.7];
       const gap = boss.rhythmIndex % lanes.length;
       for (let i = 0; i < lanes.length; i += 1) {
@@ -3258,6 +3286,46 @@ function drawBossTelegraph(
       const angle = Math.PI * 0.18 + (Math.PI * 0.64 * i) / (count - 1);
       drawTelegraphLine(ctx, boss.x, boss.y, angle, Math.hypot(state.width, state.height), alpha * 0.78, 13);
     }
+  }
+  ctx.restore();
+}
+
+function drawWaveWallTelegraph(
+  ctx: CanvasRenderingContext2D,
+  state: GameState,
+  boss: Boss,
+  alpha: number,
+  width: number,
+) {
+  const y = boss.y + boss.radius * 1.35;
+  ctx.save();
+  ctx.shadowColor = "rgba(255,255,255,0.58)";
+  ctx.shadowBlur = 14;
+  ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.36})`;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(-20, y);
+  ctx.lineTo(state.width + 20, y);
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.setLineDash([20, 12]);
+  ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.9})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-20, y);
+  ctx.lineTo(state.width + 20, y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.42})`;
+  ctx.lineWidth = 1;
+  for (let x = 18; x < state.width; x += 48) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - width * 0.72);
+    ctx.lineTo(x + 14, y);
+    ctx.lineTo(x, y + width * 0.72);
+    ctx.stroke();
   }
   ctx.restore();
 }
