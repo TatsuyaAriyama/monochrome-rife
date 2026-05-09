@@ -102,7 +102,7 @@ type Particle = Vec & {
   radius: number;
   life: number;
   maxLife: number;
-  kind: "ripple" | "spark" | "text" | "wave" | "afterimage";
+  kind: "ripple" | "spark" | "text" | "wave" | "afterimage" | "rest";
   label?: string;
 };
 
@@ -172,6 +172,7 @@ type GameState = {
   runLoop: number;
   waveKills: number;
   score: number;
+  nextRestScore: number;
   spawnClock: number;
   fireClock: number;
   pulseClock: number;
@@ -1685,6 +1686,7 @@ function GameScreen({
         runLoop: 1,
         waveKills: 0,
         score: 0,
+        nextRestScore: 1000,
         spawnClock: 0,
         fireClock: 0,
         pulseClock: 7,
@@ -2042,6 +2044,7 @@ function GameScreen({
     state.silenceAmount = state.stageIndex === 2 ? 0.18 : 0;
     state.bannerText = `STAGE ${state.stageIndex + 1}  ${STAGES[state.stageIndex].name}`;
     state.bannerClock = 2;
+    checkRestSpawn(state);
     audioRef.current.setGameStage(state.stageIndex, false);
   }
 
@@ -2126,6 +2129,37 @@ function GameScreen({
       mode: 0,
       telegraph: false,
     });
+  }
+
+  function spawnRestCharacter(state: GameState) {
+    const margin = 90;
+    const x = margin + Math.random() * Math.max(1, state.width - margin * 2);
+    const y = 120 + Math.random() * Math.max(1, state.height - 220);
+    const hp = 38 + state.runLoop * 4;
+    state.enemies.push({
+      id: state.nextId++,
+      x,
+      y,
+      radius: 18,
+      hp,
+      maxHp: hp,
+      speed: 34,
+      damage: 0,
+      kind: 8,
+      pulse: Math.random() * Math.PI * 2,
+      attackClock: 0,
+      mode: 0,
+      telegraph: false,
+    });
+    addRipple(state, x, y, 120, "rest");
+    audioRef.current.loot(false);
+  }
+
+  function checkRestSpawn(state: GameState) {
+    while (state.score >= state.nextRestScore) {
+      spawnRestCharacter(state);
+      state.nextRestScore += 1000;
+    }
   }
 
   function spawnBoss(state: GameState) {
@@ -2473,6 +2507,31 @@ function GameScreen({
       const toPlayer = normalize(state.player.x - enemy.x, state.player.y - enemy.y);
       const side = rotate(toPlayer, Math.PI / 2);
 
+      if (enemy.kind === 8) {
+        const dist = distance(enemy, state.player);
+        const away = dist < 180 ? -28 : 0;
+        enemy.x +=
+          (toPlayer.x * away + side.x * Math.sin(enemy.pulse * 0.72) * enemy.speed) * dt;
+        enemy.y +=
+          (toPlayer.y * away + side.y * Math.cos(enemy.pulse * 0.68) * enemy.speed) * dt;
+        enemy.x = clamp(enemy.x, 44, state.width - 44);
+        enemy.y = clamp(enemy.y, 94, state.height - 44);
+        if (Math.random() < 0.04) {
+          state.particles.push({
+            id: state.nextId++,
+            x: enemy.x + (Math.random() - 0.5) * 28,
+            y: enemy.y + (Math.random() - 0.5) * 28,
+            vx: (Math.random() - 0.5) * 12,
+            vy: (Math.random() - 0.5) * 12,
+            radius: 12 + Math.random() * 18,
+            life: 0.6,
+            maxLife: 0.6,
+            kind: "rest",
+          });
+        }
+        return;
+      }
+
       if (enemy.kind === 1) {
         const closeEnough = distance(enemy, state.player) < 260;
         enemy.attackClock -= dt;
@@ -2552,6 +2611,26 @@ function GameScreen({
       maxLife: 0.28,
       kind: "afterimage",
     });
+  }
+
+  function addRestBurst(state: GameState, x: number, y: number) {
+    addRipple(state, x, y, 92, "rest");
+    addRipple(state, x, y, 148, "rest");
+    for (let i = 0; i < 18; i += 1) {
+      const angle = (Math.PI * 2 * i) / 18;
+      const speed = 18 + Math.random() * 48;
+      state.particles.push({
+        id: state.nextId++,
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        radius: 5 + Math.random() * 13,
+        life: 0.72,
+        maxLife: 0.72,
+        kind: "rest",
+      });
+    }
   }
 
   function fireDistortedNote(state: GameState, enemy: Enemy) {
@@ -2653,8 +2732,15 @@ function GameScreen({
         survivors.push(enemy);
         continue;
       }
+      if (enemy.kind === 8) {
+        state.player.hp = Math.min(state.player.maxHp, state.player.hp + 10);
+        addRestBurst(state, enemy.x, enemy.y);
+        audioRef.current.loot(false);
+        continue;
+      }
       state.waveKills += 1;
       state.score += 30 + (state.stageIndex + 1) * 14 + state.runLoop * 5;
+      checkRestSpawn(state);
       addRipple(state, enemy.x, enemy.y, 58, "ripple");
       audioRef.current.kill();
       if (stats.lifesteal) {
@@ -2674,6 +2760,7 @@ function GameScreen({
   function handlePlayerDamage(state: GameState) {
     if (state.player.invincible > 0) return;
     for (const enemy of state.enemies) {
+      if (enemy.kind === 8) continue;
       if (distance(state.player, enemy) <= state.player.radius + enemy.radius) {
         damagePlayer(state, enemy.damage);
         enemy.hp -= 999;
@@ -3322,7 +3409,55 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState, elapsed: n
     ctx.strokeStyle = `rgba(255,255,255,${0.32 + hp * 0.45})`;
     ctx.lineWidth = 1.5;
 
-    if (enemy.kind === 0) {
+    if (enemy.kind === 8) {
+      // Sixty-fourth rest: a fragile pause that briefly heals the player.
+      const glow = 0.42 + Math.sin(elapsed * 3 + enemy.pulse) * 0.12;
+      ctx.shadowColor = "rgba(184,255,166,0.7)";
+      ctx.shadowBlur = 18;
+      ctx.strokeStyle = `rgba(184,255,166,${0.76 + glow * 0.2})`;
+      ctx.fillStyle = `rgba(184,255,166,${0.12 + glow * 0.08})`;
+      ctx.lineWidth = 2;
+
+      for (let ring = 1.1; ring <= 1.7; ring += 0.3) {
+        ctx.beginPath();
+        ctx.ellipse(0, 0, enemy.radius * ring, enemy.radius * 0.52 * ring, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(enemy.radius * 0.28, -enemy.radius * 1.25);
+      ctx.lineTo(-enemy.radius * 0.18, enemy.radius * 1.1);
+      ctx.stroke();
+
+      for (let flag = 0; flag < 4; flag += 1) {
+        const y = -enemy.radius * 0.78 + flag * enemy.radius * 0.36;
+        ctx.beginPath();
+        ctx.moveTo(enemy.radius * 0.22, y);
+        ctx.bezierCurveTo(
+          -enemy.radius * 0.42,
+          y + enemy.radius * 0.02,
+          -enemy.radius * 0.52,
+          y + enemy.radius * 0.32,
+          -enemy.radius * 0.05,
+          y + enemy.radius * 0.42,
+        );
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.arc(-enemy.radius * 0.22, enemy.radius * 1.03, enemy.radius * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(255,255,255,0.72)";
+      for (let i = 0; i < 5; i += 1) {
+        const angle = enemy.pulse + elapsed * 0.8 + (Math.PI * 2 * i) / 5;
+        ctx.beginPath();
+        ctx.arc(Math.cos(angle) * enemy.radius * 1.7, Math.sin(angle) * enemy.radius, 1.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (enemy.kind === 0) {
       // Waveform lifeform: this existing enemy type stays as the baseline noise.
       ctx.beginPath();
       for (let i = 0; i < 8; i += 1) {
@@ -3690,6 +3825,22 @@ function drawParticles(ctx: CanvasRenderingContext2D, state: GameState) {
       ctx.moveTo(-particle.radius * 1.3, 0);
       ctx.lineTo(particle.radius * 0.9, 0);
       ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+    if (particle.kind === "rest") {
+      ctx.save();
+      ctx.strokeStyle = `rgba(184,255,166,${alpha * 0.58})`;
+      ctx.fillStyle = `rgba(255,255,255,${alpha * 0.42})`;
+      ctx.shadowColor = "rgba(184,255,166,0.55)";
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, particle.radius * (0.45 + t * 1.2), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, 1.4 + t * 1.2, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
       continue;
     }
