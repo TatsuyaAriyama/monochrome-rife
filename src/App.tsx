@@ -75,6 +75,8 @@ type Bullet = Vec & {
   life: number;
   pierce: number;
   canSplit: boolean;
+  waveRiff?: boolean;
+  phase: number;
 };
 
 type Enemy = Vec & {
@@ -112,7 +114,7 @@ type Particle = Vec & {
   radius: number;
   life: number;
   maxLife: number;
-  kind: "ripple" | "spark" | "text" | "wave" | "afterimage" | "rest";
+  kind: "ripple" | "spark" | "text" | "wave" | "afterimage" | "rest" | "riff";
   label?: string;
 };
 
@@ -210,6 +212,7 @@ type BuildStats = {
   pulse: boolean;
   aura: boolean;
   fracturedRiff: boolean;
+  waveRiff: boolean;
 };
 
 const STORAGE_KEYS = {
@@ -231,6 +234,16 @@ const ITEMS: Item[] = [
     icon: "TF",
     effect: "静かな基準音を放つ初期装備",
     flavor: "黒い譜面に触れるための小さな音叉",
+  },
+  {
+    id: "wave-riff",
+    name: "WAVE RIFF",
+    type: "weapon",
+    rarity: "Common",
+    icon: "WR",
+    effect: "弾が白い波形の刃へ変化する",
+    flavor: "取り戻した最初の波。空間を音で薄く切る",
+    droppable: true,
   },
   {
     id: "broken-metronome",
@@ -387,7 +400,7 @@ const STAGES: StageConfig[] = [
     boss: "WAVE REMNANT",
     bossPhase: 4,
     enemyLevel: 1,
-    dropItemId: "broken-metronome",
+    dropItemId: "wave-riff",
     storyText: "最初の音は、もう壊れていた。",
   },
   {
@@ -500,8 +513,13 @@ function createBuild(equipment: Equipment): BuildStats {
     pulse: false,
     aura: false,
     fracturedRiff: false,
+    waveRiff: false,
   };
 
+  if (has("wave-riff")) {
+    stats.waveRiff = true;
+    stats.bulletRadius += 0.8;
+  }
   if (has("broken-metronome")) stats.fireInterval *= 0.62;
   if (has("silver-pick")) stats.damage += 9;
   if (has("silent-vinyl")) stats.pierce += 1;
@@ -3159,8 +3177,17 @@ function GameScreen({
     const frozen = state.freezeClock > 0;
     if (!frozen) {
       state.bullets.forEach((bullet) => {
-        bullet.x += bullet.vx * dt;
-        bullet.y += bullet.vy * dt;
+        if (bullet.waveRiff) {
+          const dir = normalize(bullet.vx, bullet.vy);
+          const side = rotate(dir, Math.PI / 2);
+          const wave = Math.sin((1.7 - bullet.life) * 16 + bullet.phase) * 22;
+          bullet.x += (bullet.vx + side.x * wave) * dt;
+          bullet.y += (bullet.vy + side.y * wave) * dt;
+          if (Math.random() < 0.32) addWaveRiffTrail(state, bullet, dir);
+        } else {
+          bullet.x += bullet.vx * dt;
+          bullet.y += bullet.vy * dt;
+        }
         bullet.life -= dt;
       });
       state.hazards.forEach((hazard) => {
@@ -3479,7 +3506,8 @@ function GameScreen({
       for (const enemy of state.enemies) {
         if (distance(bullet, enemy) > bullet.radius + enemy.radius) continue;
         enemy.hp -= bullet.damage;
-        addRipple(state, enemy.x, enemy.y, 28, "spark");
+        if (bullet.waveRiff) addWaveRiffHit(state, bullet.x, bullet.y, normalize(bullet.vx, bullet.vy));
+        else addRipple(state, enemy.x, enemy.y, 28, "spark");
         audioRef.current.hit();
         if (bullet.canSplit) splitBullet(state, bullet, stats);
         bullet.pierce -= 1;
@@ -3493,7 +3521,8 @@ function GameScreen({
         distance(bullet, state.boss) <= bullet.radius + state.boss.radius
       ) {
         state.boss.hp -= bullet.damage;
-        addRipple(state, bullet.x, bullet.y, 34, "spark");
+        if (bullet.waveRiff) addWaveRiffHit(state, bullet.x, bullet.y, normalize(bullet.vx, bullet.vy));
+        else addRipple(state, bullet.x, bullet.y, 34, "spark");
         audioRef.current.hit();
         if (bullet.canSplit) splitBullet(state, bullet, stats);
         bullet.pierce -= 1;
@@ -3692,18 +3721,23 @@ function GameScreen({
       life: 1.7,
       pierce: stats.pierce,
       canSplit: stats.split,
+      waveRiff: stats.waveRiff,
     };
     const angles = stats.split ? [-0.07, 0.07] : [0];
     angles.forEach((angle) => {
       const dir = rotate(aim, angle);
+      const bulletX = state.player.x + dir.x * 18;
+      const bulletY = state.player.y + dir.y * 18;
       state.bullets.push({
         id: state.nextId++,
-        x: state.player.x + dir.x * 18,
-        y: state.player.y + dir.y * 18,
+        x: bulletX,
+        y: bulletY,
         vx: dir.x * speed,
         vy: dir.y * speed,
+        phase: Math.random() * Math.PI * 2,
         ...base,
       });
+      if (stats.waveRiff) addWaveRiffMuzzle(state, bulletX, bulletY, Math.atan2(dir.y, dir.x));
     });
   }
 
@@ -3723,6 +3757,8 @@ function GameScreen({
         life: 0.72,
         pierce: Math.max(0, stats.pierce - 1),
         canSplit: false,
+        waveRiff: bullet.waveRiff,
+        phase: bullet.phase + angle,
       });
     });
     bullet.canSplit = false;
@@ -3746,6 +3782,57 @@ function GameScreen({
       maxLife: 0.7,
       kind,
     });
+  }
+
+  function addWaveRiffMuzzle(state: GameState, x: number, y: number, angle: number) {
+    addRipple(state, x, y, 42, "riff");
+    const side = { x: -Math.sin(angle), y: Math.cos(angle) };
+    for (let i = 0; i < 4; i += 1) {
+      state.particles.push({
+        id: state.nextId++,
+        x: x + side.x * (i - 1.5) * 4,
+        y: y + side.y * (i - 1.5) * 4,
+        vx: Math.cos(angle) * (18 + i * 5) + side.x * (i - 1.5) * 12,
+        vy: Math.sin(angle) * (18 + i * 5) + side.y * (i - 1.5) * 12,
+        radius: 3 + i,
+        life: 0.24,
+        maxLife: 0.24,
+        kind: "riff",
+      });
+    }
+  }
+
+  function addWaveRiffTrail(state: GameState, bullet: Bullet, dir: Vec) {
+    state.particles.push({
+      id: state.nextId++,
+      x: bullet.x - dir.x * 18,
+      y: bullet.y - dir.y * 18,
+      vx: -dir.x * 22 + (Math.random() - 0.5) * 10,
+      vy: -dir.y * 22 + (Math.random() - 0.5) * 10,
+      radius: bullet.radius * (1.2 + Math.random() * 0.8),
+      life: 0.22,
+      maxLife: 0.22,
+      kind: "riff",
+    });
+  }
+
+  function addWaveRiffHit(state: GameState, x: number, y: number, dir: Vec) {
+    addRipple(state, x, y, 46, "riff");
+    const side = rotate(dir, Math.PI / 2);
+    for (let i = 0; i < 6; i += 1) {
+      const spread = i - 2.5;
+      state.particles.push({
+        id: state.nextId++,
+        x,
+        y,
+        vx: side.x * spread * 18 - dir.x * (20 + i * 5),
+        vy: side.y * spread * 18 - dir.y * (20 + i * 5),
+        radius: 3 + Math.random() * 9,
+        life: 0.34,
+        maxLife: 0.34,
+        kind: "riff",
+      });
+    }
   }
 
   function addDodgeAfterimage(state: GameState) {
@@ -4387,6 +4474,10 @@ function drawBullets(ctx: CanvasRenderingContext2D, state: GameState, build: Bui
   ctx.fillStyle = "rgba(255,255,255,0.88)";
   for (const bullet of state.bullets) {
     const dir = normalize(bullet.vx, bullet.vy);
+    if (bullet.waveRiff) {
+      drawWaveRiffBullet(ctx, bullet, dir);
+      continue;
+    }
     if (build.fracturedRiff) {
       ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,0.28)";
@@ -4412,6 +4503,62 @@ function drawBullets(ctx: CanvasRenderingContext2D, state: GameState, build: Bui
     ctx.moveTo(bullet.x - dir.x * 18, bullet.y - dir.y * 18);
     ctx.lineTo(bullet.x + dir.x * 7, bullet.y + dir.y * 7);
     ctx.stroke();
+  }
+}
+
+function drawWaveRiffBullet(ctx: CanvasRenderingContext2D, bullet: Bullet, dir: Vec) {
+  const side = rotate(dir, Math.PI / 2);
+  const width = 34 + bullet.radius * 2.4;
+  const amp = 4.8 + bullet.radius * 0.32;
+  const phase = bullet.phase + bullet.life * 9;
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.shadowColor = "rgba(255,255,255,0.5)";
+  ctx.shadowBlur = 10;
+
+  ctx.strokeStyle = "rgba(255,255,255,0.2)";
+  ctx.lineWidth = bullet.radius * 1.85;
+  drawWaveRiffPath(ctx, bullet.x, bullet.y, dir, side, width, amp, phase);
+  ctx.stroke();
+
+  ctx.shadowBlur = 4;
+  ctx.strokeStyle = "rgba(255,255,255,0.86)";
+  ctx.lineWidth = 1.6;
+  drawWaveRiffPath(ctx, bullet.x, bullet.y, dir, side, width, amp, phase);
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,255,255,0.28)";
+  ctx.lineWidth = 1;
+  [-1, 1].forEach((offset) => {
+    drawWaveRiffPath(ctx, bullet.x - dir.x * 8, bullet.y - dir.y * 8, dir, side, width * 0.72, amp * 0.55, phase + offset * 0.8, offset * 4);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function drawWaveRiffPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  dir: Vec,
+  side: Vec,
+  width: number,
+  amp: number,
+  phase: number,
+  offset = 0,
+) {
+  ctx.beginPath();
+  for (let i = 0; i <= 8; i += 1) {
+    const t = i / 8;
+    const forward = -width * 0.62 + t * width;
+    const wave = Math.sin(t * Math.PI * 2.2 + phase) * amp + offset;
+    const px = x + dir.x * forward + side.x * wave;
+    const py = y + dir.y * forward + side.y * wave;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
   }
 }
 
@@ -5560,6 +5707,22 @@ function drawParticles(ctx: CanvasRenderingContext2D, state: GameState) {
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(particle.x, particle.y, 1.4 + t * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    if (particle.kind === "riff") {
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.46})`;
+      ctx.fillStyle = `rgba(255,255,255,${alpha * 0.3})`;
+      ctx.shadowColor = "rgba(255,255,255,0.36)";
+      ctx.shadowBlur = 8;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(particle.x, particle.y, particle.radius * (0.55 + t * 1.15), particle.radius * (0.22 + t * 0.5), t * Math.PI * 0.2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, 1.1 + t, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       continue;
