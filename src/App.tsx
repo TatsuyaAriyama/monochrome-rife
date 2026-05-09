@@ -460,7 +460,7 @@ function createBuild(equipment: Equipment): BuildStats {
   const has = (id: string) => ids.includes(id);
   const stats: BuildStats = {
     damage: 14,
-    fireInterval: 0.24,
+    fireInterval: 0.48,
     bulletRadius: 5,
     pierce: 0,
     split: false,
@@ -2098,7 +2098,7 @@ function GameScreen({
     const radius = 11 + Math.min(kind, 4) * 2;
     const difficulty = stage.enemyLevel + (state.runLoop - 1) * 0.65;
     const baseHp = 22 + difficulty * 10 + Math.min(kind, 4) * 7;
-    const hp = kind === 3 ? baseHp * 1.32 : baseHp;
+    const hp = kind === 3 ? baseHp * 2.64 : baseHp;
     const speedBoost = kind === 3 ? 26 : kind === 4 ? 92 : kind === 5 ? 38 : kind === 6 ? -8 : 0;
     state.enemies.push({
       id: state.nextId++,
