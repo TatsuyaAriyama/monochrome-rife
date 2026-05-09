@@ -1756,7 +1756,7 @@ function ArchiveScreen({ onBack }: { onBack: () => void }) {
         "WAVEFORM: 壊れた波が身体を得たもの。ゆっくりと距離を詰める。",
         "DISTORTED NOTE: 歪んだ音符。撃つ前に白いノイズを小さく集める。",
         "BROKEN VINYL: 割れた音楽媒体。近づかれると空間を切る。",
-        "BROKEN SCORE: 破れた楽譜。記録の線を空間へ刻む。",
+        "SHARP: 鋭く歪んだ音。細い線で空間を切り裂く。",
         "64分休符: スコア1000ごとに、黄緑色の64分休符が出現する。倒すとHPを10回復。",
       ],
     },
@@ -2480,14 +2480,14 @@ function GameScreen({
     const stage = STAGES[state.stageIndex];
     const kindPool =
       state.stageIndex === 3
-        ? [0, 0, 1, 1, 3, 6, 6, 6, 6, 6]
+        ? [0, 0, 0, 1, 1, 3, 3, 6]
         : [0, 0, 0, 0, 0, 1, 1, 1, 3, 3];
     const kind = kindPool[Math.floor(Math.random() * kindPool.length)];
-    const radius = 11 + Math.min(kind, 4) * 2;
+    const radius = kind === 6 ? 16 : 11 + Math.min(kind, 4) * 2;
     const difficulty = stage.enemyLevel + (state.runLoop - 1) * 0.65;
     const baseHp = 22 + difficulty * 10 + Math.min(kind, 4) * 7;
-    const hp = kind === 3 ? baseHp * 2.64 : kind === 6 ? baseHp * 1.35 : baseHp;
-    const speedBoost = kind === 3 ? 26 : kind === 4 ? 92 : kind === 5 ? 38 : kind === 6 ? -8 : 0;
+    const hp = kind === 3 ? baseHp * 2.64 : kind === 6 ? baseHp * 1.15 : baseHp;
+    const speedBoost = kind === 3 ? 26 : kind === 4 ? 92 : kind === 5 ? 38 : kind === 6 ? 86 : 0;
     state.enemies.push({
       id: state.nextId++,
       x,
@@ -2499,7 +2499,7 @@ function GameScreen({
       damage: 9 + Math.min(kind, 4) * 2 + state.stageIndex,
       kind,
       pulse: Math.random() * Math.PI * 2,
-      attackClock: kind === 1 ? 1.4 + Math.random() * 1.2 : kind === 3 ? 1.1 : kind === 6 ? 1.2 + Math.random() * 1.1 : 0,
+      attackClock: kind === 1 ? 1.4 + Math.random() * 1.2 : kind === 3 ? 1.1 : kind === 6 ? 0.95 + Math.random() * 0.55 : 0,
       mode: 0,
       telegraph: false,
     });
@@ -3290,24 +3290,60 @@ function GameScreen({
       }
 
       if (enemy.kind === 6) {
+        const dist = distance(enemy, state.player);
         enemy.attackClock -= dt;
-        if (enemy.attackClock <= 0.55 && !enemy.telegraph) {
+        if (enemy.mode === 2) {
+          enemy.attackClock -= dt;
+          enemy.x += Math.cos(enemy.pulse) * enemy.speed * 3.9 * dt;
+          enemy.y += Math.sin(enemy.pulse) * enemy.speed * 3.9 * dt;
+          addSharpAfterimage(state, enemy);
+          if (enemy.attackClock <= 0) {
+            enemy.mode = 3;
+            enemy.attackClock = 0.42;
+          }
+          return;
+        }
+        if (enemy.mode === 3) {
+          enemy.attackClock -= dt;
+          enemy.x += side.x * Math.sin(enemy.pulse * 2) * 22 * dt;
+          enemy.y += side.y * Math.cos(enemy.pulse * 2) * 22 * dt;
+          if (enemy.attackClock <= 0) {
+            enemy.mode = 0;
+            enemy.attackClock = 1.15 + Math.random() * 0.55;
+          }
+          return;
+        }
+        if ((enemy.attackClock <= 0.42 || dist < 145) && enemy.mode === 0) {
+          enemy.mode = 1;
+          enemy.attackClock = 0.34;
           enemy.telegraph = true;
+          enemy.pulse = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
           addRipple(state, enemy.x, enemy.y, 64, "spark");
         }
+        if (enemy.mode === 1) {
+          enemy.attackClock -= dt;
+          enemy.x += side.x * Math.sin(enemy.pulse * 6) * 14 * dt;
+          enemy.y += side.y * Math.cos(enemy.pulse * 6) * 14 * dt;
+          addSharpAfterimage(state, enemy);
+          if (enemy.attackClock <= 0) {
+            fireSharpCut(state, enemy);
+            enemy.mode = 2;
+            enemy.attackClock = 0.28;
+          }
+          return;
+        }
         if (enemy.attackClock <= 0) {
-          fireBrokenScore(state, enemy);
-          enemy.attackClock = 2.15 + Math.random() * 0.45;
+          enemy.mode = 1;
+          enemy.attackClock = 0.34;
           enemy.telegraph = false;
-          enemy.mode = (enemy.mode + 1) % 4;
+          enemy.pulse = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
         }
 
-        const glideAngle = enemy.pulse * 0.23 + enemy.mode * Math.PI * 0.5;
-        const glide = { x: Math.cos(glideAngle), y: Math.sin(glideAngle) };
-        const forward = enemy.speed * 0.18;
-        const slide = enemy.speed * (enemy.telegraph ? 0.28 : 0.72);
-        enemy.x += (toPlayer.x * forward + glide.x * slide + side.x * Math.sin(enemy.pulse * 1.3) * 20) * dt;
-        enemy.y += (toPlayer.y * forward + glide.y * slide + side.y * Math.cos(enemy.pulse * 1.1) * 20) * dt;
+        const cutAngle = Math.atan2(toPlayer.y, toPlayer.x);
+        const slash = { x: Math.cos(cutAngle + Math.sin(enemy.pulse) * 0.55), y: Math.sin(cutAngle + Math.sin(enemy.pulse) * 0.55) };
+        enemy.x += (toPlayer.x * enemy.speed * 0.42 + slash.x * enemy.speed * 0.38 + side.x * Math.sin(enemy.pulse * 3.2) * 44) * dt;
+        enemy.y += (toPlayer.y * enemy.speed * 0.42 + slash.y * enemy.speed * 0.38 + side.y * Math.cos(enemy.pulse * 3.4) * 44) * dt;
+        if (Math.random() < 0.32) addSharpAfterimage(state, enemy);
         enemy.x = clamp(enemy.x, 34, state.width - 34);
         enemy.y = clamp(enemy.y, 82, state.height - 34);
         return;
@@ -3331,6 +3367,21 @@ function GameScreen({
       radius: enemy.radius * (1.3 + Math.random() * 0.8),
       life: 0.28,
       maxLife: 0.28,
+      kind: "afterimage",
+    });
+  }
+
+  function addSharpAfterimage(state: GameState, enemy: Enemy) {
+    if (Math.random() > 0.58) return;
+    state.particles.push({
+      id: state.nextId++,
+      x: enemy.x,
+      y: enemy.y,
+      vx: -Math.cos(enemy.pulse) * 34 + (Math.random() - 0.5) * 14,
+      vy: -Math.sin(enemy.pulse) * 34 + (Math.random() - 0.5) * 14,
+      radius: enemy.radius * (0.95 + Math.random() * 0.35),
+      life: 0.22,
+      maxLife: 0.22,
       kind: "afterimage",
     });
   }
@@ -3374,11 +3425,9 @@ function GameScreen({
     audioRef.current.wavePulse();
   }
 
-  function fireBrokenScore(state: GameState, enemy: Enemy) {
-    const aim = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
-    [-0.16, 0.16].forEach((offset) => {
-      spawnScoreLine(state, enemy.x, enemy.y, aim + offset, 172, 7, 8, 1.35, 46);
-    });
+  function fireSharpCut(state: GameState, enemy: Enemy) {
+    const aim = enemy.pulse;
+    spawnScoreLine(state, enemy.x, enemy.y, aim, 260, 5.5, 10, 1.05, 96);
     addRipple(state, enemy.x, enemy.y, 84, "wave");
     audioRef.current.wavePulse();
   }
@@ -4785,45 +4834,45 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState, elapsed: n
       ctx.arc(enemy.radius * 0.85, 0, 3, 0, Math.PI * 2);
       ctx.stroke();
     } else if (enemy.kind === 6) {
-      // Broken score: a torn page of notation that writes lines into space.
+      // Sharp: a cut-mark of distorted pitch that rushes through space.
       const r = enemy.radius;
-      const tear = enemy.telegraph ? Math.sin(elapsed * 34) * 2.4 : Math.sin(elapsed * 8 + enemy.pulse) * 0.9;
+      const tremor = enemy.mode === 1 ? Math.sin(elapsed * 58) * 2.8 : Math.sin(elapsed * 20 + enemy.pulse) * 1.2;
       ctx.save();
-      ctx.shadowColor = "rgba(255,255,255,0.32)";
-      ctx.shadowBlur = enemy.telegraph ? 14 : 6;
-      ctx.fillStyle = `rgba(255,255,255,${0.025 + (enemy.telegraph ? 0.035 : 0)})`;
-      ctx.beginPath();
-      ctx.moveTo(-r * 1.1, -r * 0.78 + tear);
-      ctx.lineTo(-r * 0.18, -r * 0.64 - tear);
-      ctx.lineTo(r * 0.42, -r * 0.86 + tear * 0.4);
-      ctx.lineTo(r * 1.04, -r * 0.36 - tear);
-      ctx.lineTo(r * 0.72, r * 0.76 + tear);
-      ctx.lineTo(-r * 0.5, r * 0.62 - tear * 0.3);
-      ctx.lineTo(-r * 1.16, r * 0.18 + tear);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      ctx.rotate(enemy.mode === 2 ? enemy.pulse : Math.sin(elapsed * 1.5 + enemy.pulse) * 0.18);
+      ctx.shadowColor = "rgba(255,255,255,0.48)";
+      ctx.shadowBlur = enemy.mode === 1 ? 18 : enemy.mode === 2 ? 15 : 8;
+      ctx.strokeStyle = `rgba(255,255,255,${0.64 + hp * 0.28})`;
+      ctx.lineWidth = 2.2;
 
-      for (let i = 0; i < 5; i += 1) {
-        const y = -r * 0.42 + i * r * 0.18;
+      [-0.34, 0.34].forEach((x) => {
         ctx.beginPath();
-        ctx.moveTo(-r * 0.8, y + Math.sin(enemy.pulse + i) * 2);
-        ctx.lineTo(r * 0.72, y - Math.sin(enemy.pulse + i + elapsed) * 2);
+        ctx.moveTo(x * r * 2 + tremor, -r * 1.25);
+        ctx.lineTo(x * r * 2 - tremor * 0.4, r * 1.25);
+        ctx.stroke();
+      });
+      [-0.34, 0.34].forEach((y) => {
+        ctx.beginPath();
+        ctx.moveTo(-r * 1.15, y * r * 2 + tremor * 0.3);
+        ctx.lineTo(r * 1.15, y * r * 2 - tremor);
+        ctx.stroke();
+      });
+
+      ctx.strokeStyle = `rgba(255,255,255,${enemy.mode === 1 || enemy.mode === 2 ? 0.46 : 0.18})`;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 4; i += 1) {
+        const offset = -r * 1.35 + i * r * 0.9;
+        ctx.beginPath();
+        ctx.moveTo(offset, -r * 1.38 + Math.sin(elapsed * 24 + i) * 3);
+        ctx.lineTo(offset + r * 0.45, r * 1.38 + Math.cos(elapsed * 24 + i) * 3);
         ctx.stroke();
       }
 
-      ctx.beginPath();
-      ctx.ellipse(-r * 0.26, r * 0.34, r * 0.25, r * 0.16, -0.35, 0, Math.PI * 2);
-      ctx.moveTo(r * 0.16, r * 0.26);
-      ctx.lineTo(r * 0.16, -r * 0.36);
-      ctx.quadraticCurveTo(r * 0.58, -r * 0.18, r * 0.18, r * 0.02);
-      ctx.stroke();
-
-      if (enemy.telegraph) {
-        ctx.strokeStyle = "rgba(255,255,255,0.46)";
+      if (enemy.mode === 1 || enemy.mode === 2) {
+        ctx.strokeStyle = "rgba(255,255,255,0.42)";
+        ctx.lineWidth = 1.4;
         ctx.beginPath();
-        ctx.moveTo(-r * 1.55, Math.sin(elapsed * 20) * 3);
-        ctx.lineTo(r * 1.55, Math.cos(elapsed * 20) * 3);
+        ctx.moveTo(-r * 1.75, Math.sin(elapsed * 32) * 4);
+        ctx.lineTo(r * 1.75, Math.cos(elapsed * 32) * 4);
         ctx.stroke();
       }
       ctx.restore();
