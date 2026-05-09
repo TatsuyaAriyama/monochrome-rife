@@ -2324,8 +2324,8 @@ function GameScreen({
       id: state.nextId++,
       name: stage.boss,
       x: state.width / 2,
-      y: state.stageIndex === 2 ? 138 : 125,
-      radius: state.stageIndex === 2 ? 58 : 48 + state.stageIndex * 6,
+      y: state.stageIndex === 2 ? 170 : 125,
+      radius: state.stageIndex === 2 ? 76 : 48 + state.stageIndex * 6,
       hp: maxHp,
       maxHp,
       attack: 1.3,
@@ -4162,8 +4162,8 @@ function drawMetronomeBoss(
   telegraphProgress: number,
   noise: number,
 ) {
-  const w = boss.radius * 1.48;
-  const h = boss.radius * 2.42;
+  const w = boss.radius * 1.74;
+  const h = boss.radius * 2.56;
   const swingRate = 1.55 + enrage * 0.42 + telegraphProgress * 0.3;
   const brokenPulse = enrage > 0 ? Math.sin(elapsed * (5.2 + enrage) + boss.rhythmIndex) * enrage * 0.055 : 0;
   const swing = Math.sin(elapsed * swingRate + boss.rhythmIndex * 0.38) * (0.46 + enrage * 0.08) + brokenPulse;
@@ -4178,17 +4178,42 @@ function drawMetronomeBoss(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
+  ctx.strokeStyle = `rgba(255,255,255,${0.18 + charge * 0.14})`;
+  ctx.lineWidth = 1.1;
+  for (let ring = 0; ring < 4; ring += 1) {
+    const spread = 0.72 + ring * 0.24 + Math.sin(elapsed * 0.7 + ring) * 0.015;
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.61, w * spread, h * (0.05 + ring * 0.018), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.shadowColor = "rgba(255,255,255,0.34)";
+  ctx.shadowBlur = 16 + charge * 10;
+  ctx.fillStyle = `rgba(255,255,255,${0.025 + charge * 0.018})`;
+  ctx.strokeStyle = `rgba(255,255,255,${0.54 + charge * 0.18})`;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.64, h * 0.48);
+  ctx.lineTo(w * 0.64, h * 0.48);
+  ctx.lineTo(w * 0.76, h * 0.57);
+  ctx.lineTo(-w * 0.76, h * 0.57);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
   ctx.shadowColor = "rgba(255,255,255,0.48)";
-  ctx.shadowBlur = 12 + enrage * 4 + charge * 10;
-  ctx.fillStyle = `rgba(255,255,255,${0.035 + enrage * 0.012 + charge * 0.02})`;
-  ctx.strokeStyle = `rgba(255,255,255,${0.88 + charge * 0.08})`;
-  ctx.lineWidth = 2.6;
+  ctx.shadowBlur = 18 + enrage * 5 + charge * 14;
+  ctx.fillStyle = `rgba(255,255,255,${0.045 + enrage * 0.012 + charge * 0.024})`;
+  ctx.strokeStyle = `rgba(255,255,255,${0.94 + charge * 0.06})`;
+  ctx.lineWidth = 3.2;
 
   ctx.beginPath();
-  ctx.moveTo(0, -h * 0.58);
-  ctx.quadraticCurveTo(-w * 0.48, -h * 0.16, -w * 0.58, h * 0.44);
-  ctx.quadraticCurveTo(0, h * 0.56, w * 0.58, h * 0.44);
-  ctx.quadraticCurveTo(w * 0.48, -h * 0.16, 0, -h * 0.58);
+  ctx.moveTo(0, -h * 0.64);
+  ctx.lineTo(-w * 0.46, -h * 0.43);
+  ctx.quadraticCurveTo(-w * 0.55, -h * 0.14, -w * 0.64, h * 0.44);
+  ctx.quadraticCurveTo(0, h * 0.55, w * 0.64, h * 0.44);
+  ctx.quadraticCurveTo(w * 0.55, -h * 0.14, w * 0.46, -h * 0.43);
+  ctx.lineTo(0, -h * 0.64);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
@@ -4198,51 +4223,53 @@ function drawMetronomeBoss(
   ctx.strokeStyle = `rgba(255,255,255,${0.78 + charge * 0.1})`;
   ctx.lineWidth = 1.8;
   ctx.beginPath();
-  ctx.moveTo(-w * 0.5, -h * 0.46);
-  ctx.lineTo(0, -h * 0.68);
-  ctx.lineTo(w * 0.5, -h * 0.46);
-  ctx.lineTo(w * 0.42, -h * 0.38);
-  ctx.lineTo(-w * 0.42, -h * 0.38);
+  ctx.moveTo(-w * 0.46, -h * 0.48);
+  ctx.lineTo(0, -h * 0.72);
+  ctx.lineTo(w * 0.46, -h * 0.48);
+  ctx.lineTo(w * 0.38, -h * 0.39);
+  ctx.lineTo(-w * 0.38, -h * 0.39);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(-w * 0.72, h * 0.43);
-  ctx.lineTo(w * 0.72, h * 0.43);
-  ctx.lineTo(w * 0.56, h * 0.58);
-  ctx.lineTo(-w * 0.56, h * 0.58);
+  ctx.moveTo(-w * 0.78, h * 0.42);
+  ctx.lineTo(w * 0.78, h * 0.42);
+  ctx.lineTo(w * 0.61, h * 0.59);
+  ctx.lineTo(-w * 0.61, h * 0.59);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
 
-  ctx.strokeStyle = `rgba(255,255,255,${0.15 + enrage * 0.04})`;
+  ctx.strokeStyle = `rgba(255,255,255,${0.12 + enrage * 0.04})`;
   ctx.lineWidth = 1;
-  for (let i = 0; i < 7; i += 1) {
-    const y = -h * 0.32 + i * h * 0.12;
+  for (let i = 0; i < 12; i += 1) {
+    const y = -h * 0.37 + i * h * 0.068;
     const bend = Math.sin(elapsed * 0.55 + i) * (1.4 + enrage);
     ctx.beginPath();
-    ctx.moveTo(-w * 0.34, y + bend);
-    ctx.quadraticCurveTo(0, y - bend * 0.6, w * 0.34, y + bend * 0.42);
+    ctx.moveTo(-w * 0.42, y + bend);
+    ctx.quadraticCurveTo(0, y - bend * 0.6, w * 0.42, y + bend * 0.42);
     ctx.stroke();
   }
 
   ctx.shadowColor = "rgba(255,255,255,0.5)";
-  ctx.shadowBlur = 10 + charge * 10;
-  ctx.fillStyle = `rgba(255,255,255,${0.22 + charge * 0.12})`;
-  ctx.strokeStyle = `rgba(255,255,255,${0.72 + charge * 0.14})`;
-  ctx.lineWidth = 1.2;
+  ctx.shadowBlur = 14 + charge * 14;
+  ctx.fillStyle = `rgba(255,255,255,${0.32 + charge * 0.16})`;
+  ctx.strokeStyle = `rgba(255,255,255,${0.88 + charge * 0.1})`;
+  ctx.lineWidth = 1.6;
   ctx.beginPath();
-  ctx.rect(-w * 0.07, -h * 0.34, w * 0.14, h * 0.62);
+  ctx.rect(-w * 0.085, -h * 0.43, w * 0.17, h * 0.72);
   ctx.fill();
   ctx.stroke();
+  ctx.fillStyle = `rgba(255,255,255,${0.58 + charge * 0.18})`;
+  ctx.fillRect(-w * 0.027, -h * 0.4, w * 0.054, h * 0.66);
   ctx.shadowBlur = 0;
 
   ctx.strokeStyle = "rgba(5,5,5,0.62)";
   ctx.lineWidth = 1;
-  for (let i = 0; i <= 13; i += 1) {
-    const y = -h * 0.3 + (h * 0.52 * i) / 13;
-    const tick = i % 2 === 0 ? w * 0.12 : w * 0.08;
+  for (let i = 0; i <= 18; i += 1) {
+    const y = -h * 0.39 + (h * 0.62 * i) / 18;
+    const tick = i % 3 === 0 ? w * 0.14 : w * 0.085;
     ctx.beginPath();
     ctx.moveTo(-tick, y);
     ctx.lineTo(tick, y);
@@ -4250,16 +4277,16 @@ function drawMetronomeBoss(
   }
 
   ctx.strokeStyle = `rgba(255,255,255,${0.5 + charge * 0.24})`;
-  ctx.lineWidth = 1.4;
+  ctx.lineWidth = 1.7;
   ctx.save();
-  ctx.translate(0, h * 0.23);
+  ctx.translate(0, h * 0.27);
   ctx.rotate(Math.PI / 4);
-  ctx.strokeRect(-10, -10, 20, 20);
+  ctx.strokeRect(-13, -13, 26, 26);
   ctx.beginPath();
-  ctx.moveTo(-6, 0);
-  ctx.lineTo(6, 0);
-  ctx.moveTo(0, -7);
-  ctx.lineTo(0, 7);
+  ctx.moveTo(-8, 0);
+  ctx.lineTo(8, 0);
+  ctx.moveTo(0, -9);
+  ctx.lineTo(0, 9);
   ctx.stroke();
   ctx.restore();
 
@@ -4271,48 +4298,50 @@ function drawMetronomeBoss(
   ctx.stroke();
 
   ctx.save();
-  ctx.translate(w * 0.66, h * 0.2);
-  ctx.strokeStyle = `rgba(255,255,255,${0.44 + charge * 0.18})`;
-  ctx.lineWidth = 1.4;
+  ctx.translate(w * 0.69, h * 0.18);
+  ctx.strokeStyle = `rgba(255,255,255,${0.54 + charge * 0.24})`;
+  ctx.lineWidth = 1.7;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(w * 0.18, 0);
+  ctx.lineTo(w * 0.2, 0);
   ctx.stroke();
   ctx.beginPath();
-  ctx.arc(w * 0.24, 0, 6, 0, Math.PI * 2);
-  ctx.moveTo(w * 0.24, -6);
-  ctx.lineTo(w * 0.24, 6);
-  ctx.moveTo(w * 0.18, 0);
-  ctx.lineTo(w * 0.3, 0);
+  ctx.arc(w * 0.27, 0, 8, 0, Math.PI * 2);
+  ctx.moveTo(w * 0.27, -8);
+  ctx.lineTo(w * 0.27, 8);
+  ctx.moveTo(w * 0.2, 0);
+  ctx.lineTo(w * 0.34, 0);
   ctx.stroke();
   ctx.restore();
 
   ctx.save();
   ctx.rotate(swing);
-  ctx.strokeStyle = `rgba(255,255,255,${0.82 + charge * 0.12})`;
-  ctx.lineWidth = 2;
+  ctx.shadowColor = "rgba(255,255,255,0.56)";
+  ctx.shadowBlur = 10 + charge * 14;
+  ctx.strokeStyle = `rgba(255,255,255,${0.9 + charge * 0.08})`;
+  ctx.lineWidth = 2.8;
   ctx.beginPath();
-  ctx.moveTo(0, -h * 0.38);
-  ctx.lineTo(0, h * 0.42);
+  ctx.moveTo(0, -h * 0.45);
+  ctx.lineTo(0, h * 0.49);
   ctx.stroke();
 
-  ctx.fillStyle = `rgba(255,255,255,${0.7 + charge * 0.16})`;
+  ctx.fillStyle = `rgba(255,255,255,${0.78 + charge * 0.16})`;
   ctx.strokeStyle = `rgba(5,5,5,${0.38 + charge * 0.12})`;
   ctx.save();
   ctx.translate(0, h * 0.02);
-  ctx.rotate(-0.22);
-  ctx.fillRect(-7, -12, 14, 24);
-  ctx.strokeRect(-7, -12, 14, 24);
+  ctx.rotate(-0.18);
+  ctx.fillRect(-10, -16, 20, 32);
+  ctx.strokeRect(-10, -16, 20, 32);
   ctx.restore();
   ctx.beginPath();
-  ctx.ellipse(0, h * 0.4, 7 + enrage * 1.5, 9 + enrage * 1.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, h * 0.49, 8 + enrage * 2, 11 + enrage * 2, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
   ctx.strokeStyle = `rgba(255,255,255,${0.4 + charge * 0.28})`;
-  ctx.lineWidth = 1.4;
+  ctx.lineWidth = 1.8;
   ctx.beginPath();
-  ctx.arc(0, -h * 0.4, 5, 0, Math.PI * 2);
+  ctx.arc(0, -h * 0.45, 6, 0, Math.PI * 2);
   ctx.stroke();
 
   if (telegraphProgress > 0) {
