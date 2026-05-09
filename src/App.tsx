@@ -1459,7 +1459,7 @@ function IntroStoryScreen({ onComplete }: { onComplete: () => void }) {
   ];
 
   useEffect(() => {
-    const timer = window.setTimeout(onComplete, 16600);
+    const timer = window.setTimeout(onComplete, 23400);
     return () => window.clearTimeout(timer);
   }, [onComplete]);
 
@@ -1486,7 +1486,7 @@ function IntroStoryScreen({ onComplete }: { onComplete: () => void }) {
           <p
             className="intro-line"
             key={line}
-            style={{ animationDelay: `${0.8 + index * 2.45}s` }}
+            style={{ animationDelay: `${1 + index * 3.35}s` }}
           >
             {line}
           </p>

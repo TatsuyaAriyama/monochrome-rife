@@ -176,7 +176,7 @@ button:disabled {
   line-height: 2.1;
   font-weight: 300;
   opacity: 0;
-  animation: introLine 3.4s ease-in-out forwards;
+  animation: introLine 4.7s ease-in-out forwards;
 }
 
 .intro-copy h1 {
@@ -188,7 +188,7 @@ button:disabled {
   font-weight: 250;
   opacity: 0;
   text-shadow: 0 0 28px rgba(255, 255, 255, 0.2);
-  animation: introTitle 3.1s ease-in-out 13.25s forwards;
+  animation: introTitle 5.2s ease-in-out 17.9s forwards;
 }
 
 .intro-skip {
