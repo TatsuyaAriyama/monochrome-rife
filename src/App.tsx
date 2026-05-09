@@ -92,6 +92,7 @@ type Hazard = Vec & {
   angle?: number;
   length?: number;
   width?: number;
+  angularVelocity?: number;
 };
 
 type Particle = Vec & {
@@ -2160,12 +2161,28 @@ function GameScreen({
     const boss = state.boss;
     const hpRatio = boss.hp / boss.maxHp;
     const enrage = hpRatio < 0.35 ? 2 : hpRatio < 0.68 ? 1 : 0;
-    const movement = boss.phase === 2 ? 32 + enrage * 16 : 44 + enrage * 14;
-    boss.x += Math.sin(performance.now() / 900 + boss.phase) * movement * dt;
-    boss.y += (118 + Math.sin(performance.now() / 1100) * (22 + enrage * 8) - boss.y) * dt;
+    const time = state.bossElapsed;
+    const motionScale = boss.phase === 2 ? 0.78 : 1;
+    const targetX =
+      state.width / 2 +
+      Math.sin(time * (0.62 + enrage * 0.12) + boss.phase * 1.8) *
+        (76 + state.stageIndex * 18 + enrage * 22) *
+        motionScale +
+      Math.sin(time * 0.23 + boss.rhythmIndex) * 24 * motionScale;
+    const targetY =
+      118 +
+      state.stageIndex * 8 +
+      Math.sin(time * (0.78 + enrage * 0.08) + boss.phase) * (18 + enrage * 9);
+    boss.x += (targetX - boss.x) * dt * (0.58 + enrage * 0.16);
+    boss.y += (targetY - boss.y) * dt * (0.72 + enrage * 0.12);
 
     if (boss.telegraphClock > 0) {
       const previous = boss.telegraphClock;
+      const charge = 1 - boss.telegraphClock / boss.telegraphDuration;
+      boss.x += Math.cos(boss.targetAngle + Math.PI) * (18 + enrage * 8) * charge * dt;
+      boss.y += Math.sin(boss.targetAngle + Math.PI) * (10 + enrage * 5) * charge * dt;
+      boss.x = clamp(boss.x, boss.radius + 36, state.width - boss.radius - 36);
+      boss.y = clamp(boss.y, boss.radius + 48, Math.min(190, state.height * 0.34));
       boss.telegraphClock = Math.max(0, boss.telegraphClock - dt);
       if (previous > 0 && boss.telegraphClock === 0) {
         fireBossPattern(state, boss, enrage);
@@ -2173,6 +2190,8 @@ function GameScreen({
       }
       return;
     }
+    boss.x = clamp(boss.x, boss.radius + 36, state.width - boss.radius - 36);
+    boss.y = clamp(boss.y, boss.radius + 48, Math.min(190, state.height * 0.34));
 
     boss.attack -= dt;
     if (boss.attack <= 0) {
@@ -2187,13 +2206,15 @@ function GameScreen({
 
   function beginBossTelegraph(state: GameState, boss: Boss, enrage: number) {
     boss.pattern = chooseBossPattern(state, boss, enrage);
-    boss.telegraphDuration = state.stageIndex === 0 ? 0.95 : state.stageIndex === 1 ? 0.82 : 1.15;
+    boss.telegraphDuration =
+      state.stageIndex === 0 ? 1.08 : state.stageIndex === 1 ? 1.02 : 1.24;
     boss.telegraphClock = boss.telegraphDuration;
     boss.targetX = state.player.x;
     boss.targetY = state.player.y;
     boss.targetAngle = Math.atan2(state.player.y - boss.y, state.player.x - boss.x);
     boss.rhythmIndex += 1;
     addRipple(state, boss.x, boss.y, 78 + state.stageIndex * 18, "spark");
+    state.shake = settings.reducedMotion ? 0 : 0.45 + enrage * 0.3;
     audioRef.current.wavePulse();
   }
 
@@ -2220,13 +2241,13 @@ function GameScreen({
         window.setTimeout(() => {
           const live = stateRef.current;
           if (live?.boss?.id === boss.id && !live.gameOver) {
-            spawnBossLaser(live, boss.x, boss.y, boss.targetAngle + offset, 16, enrage > 0 ? 2 : 1, 0.5);
+            spawnBossLaser(live, boss.x, boss.y, boss.targetAngle + offset, 18, 10, 0.5);
           }
         }, index * 180);
       });
       return;
     }
-    spawnBossLaser(state, boss.x, boss.y, boss.targetAngle, 18, enrage > 0 ? 2 : 1, 0.55);
+    spawnBossLaser(state, boss.x, boss.y, boss.targetAngle, 20, 10, 0.55);
   }
 
   function fireStageTwoBoss(state: GameState, boss: Boss, enrage: number) {
@@ -2240,14 +2261,14 @@ function GameScreen({
       const side = boss.rhythmIndex % 2 === 0 ? -1 : 1;
       for (let i = 0; i < 5; i += 1) {
         const y = 150 + i * 82;
-        spawnBossLaser(state, side < 0 ? 0 : state.width, y, side < 0 ? 0 : Math.PI, 14, enrage > 0 ? 2 : 1, 0.42);
+        spawnBossLaser(state, side < 0 ? 0 : state.width, y, side < 0 ? 0 : Math.PI, 16, 10, 0.42);
       }
       return;
     }
     const aim = normalize(state.player.x - boss.x, state.player.y - boss.y);
     boss.x += aim.x * 70;
     boss.y += aim.y * 28;
-    spawnBossLaser(state, boss.x, boss.y, boss.targetAngle, 18, enrage > 0 ? 2 : 1, 0.48);
+    spawnBossLaser(state, boss.x, boss.y, boss.targetAngle, 20, 10, 0.48);
   }
 
   function fireStageThreeBoss(state: GameState, boss: Boss, enrage: number) {
@@ -2270,11 +2291,20 @@ function GameScreen({
       const x = boss.targetX;
       for (let i = 0; i < 5; i += 1) {
         const offset = (i - 2) * 34;
-        spawnBossLaser(state, x + offset, 72, Math.PI / 2, 13, enrage > 0 ? 2 : 1, 0.44);
+        spawnBossLaser(state, x + offset, 72, Math.PI / 2, 16, 10, 0.44);
       }
       return;
     }
-    spawnBossLaser(state, boss.x, boss.y, boss.targetAngle, 22, enrage > 0 ? 2 : 1, 0.62);
+    spawnBossLaser(
+      state,
+      boss.x,
+      boss.y,
+      boss.targetAngle - 0.18,
+      25,
+      10,
+      0.82,
+      boss.rhythmIndex % 2 === 0 ? 0.42 : -0.42,
+    );
   }
 
   function spawnBossLaser(
@@ -2285,6 +2315,7 @@ function GameScreen({
     width: number,
     damage: number,
     life: number,
+    angularVelocity = 0,
   ) {
     state.hazards.push({
       id: state.nextId++,
@@ -2293,12 +2324,13 @@ function GameScreen({
       vx: 0,
       vy: 0,
       radius: width / 2,
-      damage,
+      damage: 10,
       life,
       kind: "laser",
       angle,
       length: Math.hypot(state.width, state.height) + 160,
       width,
+      angularVelocity,
     });
     audioRef.current.wavePulse();
   }
@@ -2338,6 +2370,9 @@ function GameScreen({
         bullet.life -= dt;
       });
       state.hazards.forEach((hazard) => {
+        if (hazard.kind === "laser" && hazard.angularVelocity) {
+          hazard.angle = (hazard.angle ?? 0) + hazard.angularVelocity * dt;
+        }
         hazard.x += hazard.vx * dt;
         hazard.y += hazard.vy * dt;
         hazard.life -= dt;
@@ -2892,27 +2927,53 @@ function drawBossTelegraph(
 
   if (state.stageIndex === 0) {
     const offsets = boss.pattern === 1 ? [-0.12, 0.12] : [0];
-    offsets.forEach((offset) => drawTelegraphLine(ctx, boss.x, boss.y, boss.targetAngle + offset, state.width, alpha, 18));
+    offsets.forEach((offset) =>
+      drawTelegraphLine(
+        ctx,
+        boss.x,
+        boss.y,
+        boss.targetAngle + offset,
+        Math.hypot(state.width, state.height),
+        alpha,
+        boss.pattern === 1 ? 18 : 20,
+      ),
+    );
   } else if (state.stageIndex === 1) {
     if (boss.pattern === 1) {
       const side = boss.rhythmIndex % 2 === 0 ? 0 : state.width;
+      const angle = side === 0 ? 0 : Math.PI;
       for (let i = 0; i < 5; i += 1) {
         const y = 150 + i * 82;
-        ctx.beginPath();
-        ctx.rect(side === 0 ? 0 : state.width - 34, y - 18, 34, 36);
-        ctx.fill();
-        ctx.stroke();
+        drawTelegraphLine(ctx, side, y, angle, state.width, alpha * 1.12, 16);
       }
+    } else if (boss.pattern === 2) {
+      drawTelegraphLine(
+        ctx,
+        boss.x,
+        boss.y,
+        boss.targetAngle,
+        Math.hypot(state.width, state.height),
+        alpha * 1.1,
+        20,
+      );
     } else {
       [-0.34, -0.17, 0, 0.17, 0.34].forEach((offset) => {
-        drawTelegraphLine(ctx, boss.x, boss.y, boss.targetAngle + offset, state.width, alpha * 0.9, 8);
+        drawTelegraphLine(
+          ctx,
+          boss.x,
+          boss.y,
+          boss.targetAngle + offset,
+          Math.hypot(state.width, state.height),
+          alpha * 0.9,
+          9,
+        );
       });
     }
   } else if (boss.pattern === 2) {
-    ctx.beginPath();
-    ctx.rect(boss.targetX - 96, 72, 192, state.height - 96);
-    ctx.fill();
-    ctx.stroke();
+    for (let i = 0; i < 5; i += 1) {
+      const offset = (i - 2) * 34;
+      drawTelegraphLine(ctx, boss.targetX + offset, 72, Math.PI / 2, state.height, alpha, 16);
+    }
   } else if (boss.pattern === 1) {
     const gap = boss.rhythmIndex % 4;
     for (let i = 0; i < 8; i += 1) {
@@ -2920,9 +2981,31 @@ function drawBossTelegraph(
       drawTelegraphLine(ctx, boss.x, boss.y, (Math.PI * 2 * i) / 8, state.width, alpha * 0.75, 7);
     }
   } else {
-    [-0.22, 0, 0.22].forEach((offset) => {
-      drawTelegraphLine(ctx, boss.x, boss.y, boss.targetAngle + offset, state.width, alpha, boss.pattern === 3 ? 22 : 8);
-    });
+    if (boss.pattern === 3) {
+      [-0.18, 0, 0.18].forEach((offset, index) => {
+        drawTelegraphLine(
+          ctx,
+          boss.x,
+          boss.y,
+          boss.targetAngle + offset,
+          Math.hypot(state.width, state.height),
+          alpha * (index === 1 ? 1.15 : 0.46),
+          index === 1 ? 25 : 9,
+        );
+      });
+    } else {
+      [-0.22, 0, 0.22].forEach((offset) => {
+        drawTelegraphLine(
+          ctx,
+          boss.x,
+          boss.y,
+          boss.targetAngle + offset,
+          Math.hypot(state.width, state.height),
+          alpha,
+          9,
+        );
+      });
+    }
   }
   ctx.restore();
 }
@@ -2938,19 +3021,37 @@ function drawTelegraphLine(
 ) {
   ctx.save();
   ctx.lineCap = "round";
-  ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.18})`;
-  ctx.lineWidth = width;
+  ctx.shadowColor = "rgba(255,255,255,0.58)";
+  ctx.shadowBlur = 12;
+  ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.24})`;
+  ctx.lineWidth = width * 1.55;
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
   ctx.stroke();
 
-  ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
-  ctx.lineWidth = 1.5;
+  ctx.shadowBlur = 0;
+  ctx.setLineDash([18, 14]);
+  ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.82})`;
+  ctx.lineWidth = Math.max(2, width * 0.18);
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
   ctx.stroke();
+
+  ctx.setLineDash([]);
+  ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.34})`;
+  ctx.lineWidth = 1;
+  for (let i = 90; i < length; i += 120) {
+    const cx = x + Math.cos(angle) * i;
+    const cy = y + Math.sin(angle) * i;
+    const nx = -Math.sin(angle);
+    const ny = Math.cos(angle);
+    ctx.beginPath();
+    ctx.moveTo(cx - nx * width * 0.55, cy - ny * width * 0.55);
+    ctx.lineTo(cx + nx * width * 0.55, cy + ny * width * 0.55);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -3045,33 +3146,54 @@ function drawLaser(ctx: CanvasRenderingContext2D, hazard: Hazard) {
   const fade = clamp(hazard.life / 0.18, 0, 1);
   const x2 = hazard.x + Math.cos(angle) * length;
   const y2 = hazard.y + Math.sin(angle) * length;
+  const nx = -Math.sin(angle);
+  const ny = Math.cos(angle);
 
   ctx.save();
   ctx.lineCap = "round";
   ctx.shadowColor = "rgba(255,255,255,0.72)";
-  ctx.shadowBlur = 18;
-  ctx.strokeStyle = `rgba(255,255,255,${0.18 * fade})`;
-  ctx.lineWidth = width * 2.5;
+  ctx.shadowBlur = 24;
+  ctx.strokeStyle = `rgba(255,255,255,${0.2 * fade})`;
+  ctx.lineWidth = width * 3.2;
   ctx.beginPath();
   ctx.moveTo(hazard.x, hazard.y);
   ctx.lineTo(x2, y2);
   ctx.stroke();
 
-  ctx.shadowBlur = 8;
-  ctx.strokeStyle = `rgba(255,255,255,${0.48 * fade})`;
-  ctx.lineWidth = width;
+  ctx.shadowBlur = 10;
+  ctx.strokeStyle = `rgba(255,255,255,${0.58 * fade})`;
+  ctx.lineWidth = width * 1.18;
   ctx.beginPath();
   ctx.moveTo(hazard.x, hazard.y);
   ctx.lineTo(x2, y2);
   ctx.stroke();
 
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = `rgba(255,255,255,${0.95 * fade})`;
-  ctx.lineWidth = Math.max(3, width * 0.28);
+  ctx.strokeStyle = `rgba(5,5,5,${0.45 * fade})`;
+  ctx.lineWidth = Math.max(2, width * 0.52);
   ctx.beginPath();
   ctx.moveTo(hazard.x, hazard.y);
   ctx.lineTo(x2, y2);
   ctx.stroke();
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.98 * fade})`;
+  ctx.lineWidth = Math.max(3, width * 0.22);
+  ctx.beginPath();
+  ctx.moveTo(hazard.x, hazard.y);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.26 * fade})`;
+  ctx.lineWidth = 1;
+  for (let i = 120; i < length; i += 150) {
+    const cx = hazard.x + Math.cos(angle) * i;
+    const cy = hazard.y + Math.sin(angle) * i;
+    const tear = width * (0.55 + ((i / 150) % 2) * 0.28);
+    ctx.beginPath();
+    ctx.moveTo(cx - nx * tear, cy - ny * tear);
+    ctx.lineTo(cx + nx * tear, cy + ny * tear);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -3250,15 +3372,29 @@ function drawBoss(
 ) {
   const hpRatio = boss.hp / boss.maxHp;
   const enrage = hpRatio < 0.35 ? 2 : hpRatio < 0.68 ? 1 : 0;
+  const telegraphProgress =
+    boss.telegraphDuration > 0 && boss.telegraphClock > 0
+      ? 1 - boss.telegraphClock / boss.telegraphDuration
+      : 0;
+  const noise =
+    enrage * 0.9 +
+    telegraphProgress * 2.8 +
+    (state.freezeClock > 0 ? Math.sin(elapsed * 44) * 2.2 : 0);
   ctx.save();
-  ctx.translate(boss.x, boss.y);
-  ctx.strokeStyle = `rgba(255,255,255,${0.72 + enrage * 0.1})`;
-  ctx.fillStyle = `rgba(255,255,255,${0.05 + enrage * 0.025})`;
+  ctx.translate(
+    boss.x + Math.sin(elapsed * 37 + boss.id) * noise,
+    boss.y + Math.cos(elapsed * 31 + boss.rhythmIndex) * noise * 0.75,
+  );
+  ctx.shadowColor = "rgba(255,255,255,0.5)";
+  ctx.shadowBlur = 8 + enrage * 8 + telegraphProgress * 18;
+  ctx.strokeStyle = `rgba(255,255,255,${0.72 + enrage * 0.1 + telegraphProgress * 0.12})`;
+  ctx.fillStyle = `rgba(255,255,255,${0.05 + enrage * 0.025 + telegraphProgress * 0.035})`;
   ctx.lineWidth = 2 + enrage * 0.5;
   ctx.beginPath();
   ctx.arc(0, 0, boss.radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+  ctx.shadowBlur = 0;
 
   ctx.strokeStyle = `rgba(255,255,255,${0.14 + enrage * 0.1})`;
   for (let r = boss.radius + 12; r <= boss.radius + 12 + enrage * 16; r += 16) {
@@ -3267,15 +3403,40 @@ function drawBoss(
     ctx.stroke();
   }
 
+  if (telegraphProgress > 0) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.18 + telegraphProgress * 0.42})`;
+    for (let i = 0; i < 3; i += 1) {
+      const r = boss.radius + 34 - telegraphProgress * (20 + i * 7);
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.save();
+    ctx.rotate(boss.targetAngle);
+    ctx.strokeStyle = `rgba(255,255,255,${0.22 + telegraphProgress * 0.36})`;
+    ctx.beginPath();
+    ctx.moveTo(-boss.radius * 1.65, 0);
+    ctx.lineTo(boss.radius * 1.95, 0);
+    ctx.moveTo(boss.radius * 1.25, -10);
+    ctx.lineTo(boss.radius * 1.95, 0);
+    ctx.lineTo(boss.radius * 1.25, 10);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   ctx.strokeStyle = `rgba(255,255,255,${0.2 + enrage * 0.08})`;
   for (let i = 0; i < 5; i += 1) {
     ctx.beginPath();
-    ctx.moveTo(-boss.radius * 1.25, -24 + i * 12);
-    ctx.lineTo(boss.radius * 1.25, -24 + i * 12);
+    const skew = Math.sin(elapsed * (6 + enrage) + i + telegraphProgress * 6) * (2 + enrage * 1.5);
+    ctx.moveTo(-boss.radius * 1.25, -24 + i * 12 + skew);
+    ctx.lineTo(boss.radius * 1.25, -24 + i * 12 - skew);
     ctx.stroke();
   }
 
-  ctx.rotate(elapsed * (boss.phase % 2 === 0 ? 0.45 + enrage * 0.15 : -0.45 - enrage * 0.15));
+  ctx.rotate(
+    elapsed * (boss.phase % 2 === 0 ? 0.45 + enrage * 0.15 : -0.45 - enrage * 0.15) +
+      telegraphProgress * (boss.phase % 2 === 0 ? 0.55 : -0.55),
+  );
   if (boss.phase === 0) {
     ctx.beginPath();
     ctx.moveTo(0, -boss.radius);
