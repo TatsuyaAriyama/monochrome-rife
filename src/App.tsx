@@ -14,7 +14,16 @@ import {
   type UserSaveData,
 } from "./services/userService";
 
-type Screen = "account" | "home" | "stageSelect" | "travel" | "game" | "customize" | "collection" | "settings";
+type Screen =
+  | "account"
+  | "home"
+  | "stageSelect"
+  | "travel"
+  | "game"
+  | "customize"
+  | "collection"
+  | "settings"
+  | "archive";
 type Slot = "weapon" | "relic1" | "relic2" | "core";
 type ItemType = "weapon" | "relic" | "core";
 type Rarity = "Common" | "Rare" | "Legendary";
@@ -1088,6 +1097,9 @@ function App() {
           onBack={() => setScreen("home")}
         />
       )}
+      {screen === "archive" && (
+        <ArchiveScreen onBack={() => setScreen("home")} />
+      )}
       {screen === "settings" && (
         <SettingsScreen
           settings={settings}
@@ -1221,6 +1233,9 @@ function HomeScreen({
   return (
     <section className="home-screen">
       <div className="staff-lines" />
+      <button className="archive-link" onClick={() => onNavigate("archive")}>
+        ARCHIVE
+      </button>
       <div className="home-shell">
         <div className="brand-block">
           <h1>MONOCHROME RIFF</h1>
@@ -1455,6 +1470,70 @@ function CollectionScreen({
             </article>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function ArchiveScreen({ onBack }: { onBack: () => void }) {
+  const sections = [
+    {
+      title: "世界説明",
+      lines: [
+        "音は、まだ残っている。",
+        "ただし旋律は細く、世界は白と黒の間でほどけている。",
+        "Riff は回収されるたび、沈黙の形を少しだけ変える。",
+      ],
+    },
+    {
+      title: "敵記録",
+      lines: [
+        "WAVEFORM: 壊れた波が身体を得たもの。ゆっくりと距離を詰める。",
+        "DISTORTED NOTE: 歪んだ音符。撃つ前に白いノイズを小さく集める。",
+        "BROKEN VINYL: 割れた音楽媒体。近づかれると空間を切る。",
+        "64分休符: スコア1000ごとに、黄緑色の64分休符が出現する。倒すとHPを10回復。",
+      ],
+    },
+    {
+      title: "ボス記録",
+      lines: [
+        "WAVE REMNANT: 崩壊した波形生命体。身体は一定の形を保てない。",
+        "RESONANCE: 響きだけが残った存在。安全な間を波で測らせる。",
+        "BROKEN METRONOME: 壊れた時間。振り子は拍ではなく亀裂を刻む。",
+      ],
+    },
+    {
+      title: "用語",
+      lines: [
+        "Riff: 失われた短い音の記憶。",
+        "Noise: 音楽が意味を失ったあとに残る輪郭。",
+        "Rest: 戦闘の中に現れる静寂。まだ壊れていない、淡い黄緑。",
+      ],
+    },
+    {
+      title: "ストーリー断片",
+      lines: [
+        "最初の音は、もう壊れていた。",
+        "リズムは、静かに崩れ始める。",
+        "沈黙は、呼吸の仕方を覚えてしまった。",
+      ],
+    },
+  ];
+
+  return (
+    <section className="panel-screen archive-screen">
+      <Header onBack={onBack} eyebrow="Archive" title="Silent Index" />
+      <div className="archive-layout">
+        {sections.map((section) => (
+          <article className="archive-section" key={section.title}>
+            <h2>{section.title}</h2>
+            <div className="archive-lines">
+              {section.lines.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );

@@ -223,6 +223,25 @@ button:disabled {
   padding: 76px 0 42px;
 }
 
+.archive-link {
+  position: absolute;
+  z-index: 2;
+  top: 22px;
+  right: 24px;
+  min-width: 82px;
+  min-height: 32px;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.015);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.archive-link:hover {
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.055);
+}
+
 .brand-block {
   align-self: center;
 }
@@ -584,6 +603,66 @@ p {
   gap: 14px;
 }
 
+.archive-screen {
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.035), transparent),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 34px,
+      rgba(255, 255, 255, 0.055) 35px,
+      transparent 36px
+    );
+}
+
+.archive-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.archive-section {
+  position: relative;
+  overflow: hidden;
+  min-height: 210px;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.archive-section::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.28;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.14), transparent 1px),
+    radial-gradient(circle at 78% 42%, rgba(255, 255, 255, 0.1), transparent 1px);
+  background-size: 31px 29px;
+}
+
+.archive-section h2 {
+  margin: 0 0 22px;
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: 0;
+}
+
+.archive-lines {
+  display: grid;
+  gap: 12px;
+}
+
+.archive-lines p {
+  margin: 0;
+  padding-left: 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 13px;
+  line-height: 1.72;
+}
+
 .collection-card {
   min-height: 278px;
   padding: 18px;
@@ -922,8 +1001,14 @@ p {
 
   .home-menu,
   .slot-grid,
+  .archive-layout,
   .modal-actions {
     grid-template-columns: 1fr;
+  }
+
+  .archive-link {
+    top: 14px;
+    right: 14px;
   }
 
   .home-footer,
