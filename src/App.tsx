@@ -2376,29 +2376,37 @@ function GameScreen({
 
   function fireStageOneBoss(state: GameState, boss: Boss, enrage: number) {
     if (boss.pattern === 1) {
-      [-0.24, 0, 0.24].forEach((offset, index) => {
+      const offsets = enrage > 0 ? [-0.38, -0.19, 0, 0.19, 0.38] : [-0.28, -0.1, 0.1, 0.28];
+      offsets.forEach((offset, index) => {
         window.setTimeout(() => {
           const live = stateRef.current;
           if (live?.boss?.id === boss.id && !live.gameOver) {
-            spawnWaveHazard(live, boss.x, boss.y, boss.targetAngle + offset, 136 + enrage * 16, 11, 9);
+            spawnWaveHazard(live, boss.x, boss.y, boss.targetAngle + offset, 142 + enrage * 18, 10.5, 9);
           }
-        }, index * 160);
+        }, index * 130);
       });
       return;
     }
-    spawnWaveHazard(state, boss.x, boss.y, boss.targetAngle, 124 + enrage * 12, 12, 9);
-    window.setTimeout(() => {
-      const live = stateRef.current;
-      if (live?.boss?.id === boss.id && !live.gameOver) {
-        spawnWaveHazard(live, boss.x, boss.y, boss.targetAngle, 124 + enrage * 12, 12, 9);
-      }
-    }, 240);
+    [-0.16, 0.16].forEach((offset) => {
+      spawnWaveHazard(state, boss.x, boss.y, boss.targetAngle + offset, 132 + enrage * 16, 11, 9);
+    });
+    [220, 440].slice(0, enrage > 0 ? 2 : 1).forEach((delay, beat) => {
+      window.setTimeout(() => {
+        const live = stateRef.current;
+        if (live?.boss?.id === boss.id && !live.gameOver) {
+          [-0.08, 0.08].forEach((offset) => {
+            spawnWaveHazard(live, boss.x, boss.y, boss.targetAngle + offset + beat * 0.03, 132 + enrage * 16, 11, 9);
+          });
+        }
+      }, delay);
+    });
   }
 
   function fireStageTwoBoss(state: GameState, boss: Boss, enrage: number) {
     if (boss.pattern === 0) {
-      [-0.38, -0.18, 0.18, 0.38].forEach((offset) => {
-        spawnWaveHazard(state, boss.x, boss.y, boss.targetAngle + offset, 132 + enrage * 14, 10, 9);
+      const offsets = enrage > 0 ? [-0.5, -0.3, -0.11, 0.11, 0.3, 0.5] : [-0.42, -0.22, 0.22, 0.42];
+      offsets.forEach((offset) => {
+        spawnWaveHazard(state, boss.x, boss.y, boss.targetAngle + offset, 140 + enrage * 18, 10, 9);
       });
       return;
     }
@@ -2408,24 +2416,27 @@ function GameScreen({
       for (let i = 0; i < lanes.length; i += 1) {
         if (i === gap) continue;
         const y = state.height * lanes[i];
-        spawnWaveHazard(state, boss.x, boss.y, Math.atan2(y - boss.y, state.width * 0.5 - boss.x), 118 + enrage * 16, 13, 10);
+        spawnWaveHazard(state, boss.x, boss.y, Math.atan2(y - boss.y, state.width * 0.5 - boss.x), 126 + enrage * 18, 12.5, 10);
       }
       return;
     }
     if (boss.pattern === 2) {
-      [-0.28, 0, 0.28].forEach((offset, index) => {
+      const offsets = enrage > 0 ? [-0.34, -0.17, 0, 0.17, 0.34] : [-0.28, 0, 0.28];
+      offsets.forEach((offset, index) => {
         window.setTimeout(() => {
           const live = stateRef.current;
           if (live?.boss?.id === boss.id && !live.gameOver) {
-            spawnWaveHazard(live, boss.x, boss.y, boss.targetAngle + offset, 146 + enrage * 12, 11, 10);
+            spawnWaveHazard(live, boss.x, boss.y, boss.targetAngle + offset, 152 + enrage * 14, 10.5, 10);
           }
-        }, index * 210);
+        }, index * 145);
       });
       return;
     }
-    for (let i = 0; i < 5 + enrage; i += 1) {
-      const angle = -Math.PI * 0.82 + (Math.PI * 0.64 * i) / (4 + enrage);
-      spawnWaveHazard(state, boss.x, boss.y, angle, 112 + enrage * 12, 12, 9);
+    const count = 7 + enrage;
+    for (let i = 0; i < count; i += 1) {
+      if (i === Math.floor(count / 2)) continue;
+      const angle = -Math.PI * 0.86 + (Math.PI * 0.72 * i) / (count - 1);
+      spawnWaveHazard(state, boss.x, boss.y, angle, 122 + enrage * 14, 11.5, 9);
     }
   }
 
@@ -3706,6 +3717,12 @@ function drawBoss(
     enrage * 0.9 +
     telegraphProgress * 2.8 +
     (state.freezeClock > 0 ? Math.sin(elapsed * 44) * 2.2 : 0);
+
+  if (boss.phase === 4) {
+    drawWaveBoss(ctx, boss, elapsed, enrage, telegraphProgress, noise);
+    return;
+  }
+
   ctx.save();
   ctx.translate(
     boss.x + Math.sin(elapsed * 37 + boss.id) * noise,
@@ -3886,6 +3903,95 @@ function drawBoss(
     }
   }
   ctx.restore();
+}
+
+function drawWaveBoss(
+  ctx: CanvasRenderingContext2D,
+  boss: Boss,
+  elapsed: number,
+  enrage: number,
+  telegraphProgress: number,
+  noise: number,
+) {
+  const width = boss.radius * 4.4;
+  const amp = boss.radius * (0.34 + enrage * 0.08 + telegraphProgress * 0.12);
+  const distortion = 1 + enrage * 0.55 + telegraphProgress * 1.15;
+  const samples = 96;
+
+  ctx.save();
+  ctx.translate(
+    boss.x + Math.sin(elapsed * 29 + boss.id) * noise * 0.7,
+    boss.y + Math.cos(elapsed * 23 + boss.rhythmIndex) * noise * 0.45,
+  );
+  ctx.rotate(Math.sin(elapsed * 0.58) * 0.035);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.shadowColor = "rgba(255,255,255,0.62)";
+  ctx.shadowBlur = 22 + enrage * 10 + telegraphProgress * 18;
+  ctx.strokeStyle = `rgba(255,255,255,${0.18 + telegraphProgress * 0.12})`;
+  ctx.lineWidth = 16 + enrage * 5 + telegraphProgress * 6;
+  drawSmoothWavePath(ctx, width, amp, elapsed, distortion, samples, 0);
+  ctx.stroke();
+
+  ctx.shadowBlur = 8 + enrage * 5;
+  ctx.strokeStyle = `rgba(255,255,255,${0.92 + telegraphProgress * 0.06})`;
+  ctx.lineWidth = 3.2 + enrage * 0.8 + telegraphProgress * 1.2;
+  drawSmoothWavePath(ctx, width, amp, elapsed, distortion, samples, 0);
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = `rgba(255,255,255,${0.22 + enrage * 0.08})`;
+  ctx.lineWidth = 1.1;
+  [-0.55, 0.55].forEach((offset) => {
+    drawSmoothWavePath(
+      ctx,
+      width * 0.96,
+      amp * (0.62 + Math.abs(offset) * 0.12),
+      elapsed + offset,
+      distortion * 0.72,
+      samples,
+      offset * boss.radius,
+    );
+    ctx.stroke();
+  });
+
+  if (telegraphProgress > 0) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.18 + telegraphProgress * 0.38})`;
+    ctx.lineWidth = 1.4;
+    const squeeze = 1 - telegraphProgress * 0.36;
+    [-1, 1].forEach((side) => {
+      ctx.beginPath();
+      ctx.moveTo(side * width * 0.56, -amp * 0.92);
+      ctx.quadraticCurveTo(side * width * 0.42 * squeeze, 0, side * width * 0.56, amp * 0.92);
+      ctx.stroke();
+    });
+  }
+
+  ctx.restore();
+}
+
+function drawSmoothWavePath(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  amp: number,
+  elapsed: number,
+  distortion: number,
+  samples: number,
+  yOffset: number,
+) {
+  ctx.beginPath();
+  for (let i = 0; i <= samples; i += 1) {
+    const t = i / samples;
+    const x = -width / 2 + t * width;
+    const envelope = Math.sin(t * Math.PI);
+    const primary = Math.sin(t * Math.PI * 4 + elapsed * 1.45);
+    const harmonic = Math.sin(t * Math.PI * 10 + elapsed * 2.1) * 0.18 * distortion;
+    const fineNoise = Math.sin(t * Math.PI * 27 + elapsed * 5.2) * 0.035 * distortion;
+    const y = (primary + harmonic + fineNoise) * amp * envelope + yOffset;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, state: GameState) {
