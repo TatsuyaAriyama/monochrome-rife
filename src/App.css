@@ -465,9 +465,11 @@ p {
 
 .panel-screen {
   width: min(1180px, calc(100vw - 40px));
+  height: 100vh;
   margin: 0 auto;
   padding: 42px 0 54px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .screen-header {
@@ -502,7 +504,10 @@ p {
 }
 
 .slot-panel {
+  display: flex;
+  flex-direction: column;
   min-height: 320px;
+  max-height: calc(100vh - 176px);
   padding: 18px;
 }
 
@@ -531,7 +536,10 @@ p {
 .item-list {
   display: grid;
   gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
   padding-top: 16px;
+  padding-right: 4px;
 }
 
 .mini-card {
