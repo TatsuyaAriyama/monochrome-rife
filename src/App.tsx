@@ -88,7 +88,7 @@ type Hazard = Vec & {
   radius: number;
   damage: number;
   life: number;
-  kind?: "orb" | "laser";
+  kind?: "orb" | "laser" | "wave";
   angle?: number;
   length?: number;
   width?: number;
@@ -181,6 +181,7 @@ type GameState = {
   silenceAmount: number;
   freezeClock: number;
   freezeCooldown: number;
+  freezeReason: "intro" | "stop" | null;
   shake: number;
   gameOver: boolean;
   nextId: number;
@@ -351,13 +352,7 @@ const ITEMS: Item[] = [
   },
 ];
 
-const BOSSES = [
-  "NOISE CONDUCTOR",
-  "BROKEN METRONOME",
-  "WHITE REQUIEM",
-  "SILENT SPEAKER",
-  "BLACK VINYL",
-];
+const BOSSES = ["WAVE REMNANT", "RESONANCE", "BROKEN METRONOME"];
 
 const STAGE_DURATIONS = {
   combat: 60,
@@ -367,24 +362,24 @@ const STAGE_DURATIONS = {
 const STAGES: StageConfig[] = [
   {
     name: "SILENT ENTRY",
-    boss: "BROKEN METRONOME",
-    bossPhase: 1,
+    boss: "WAVE REMNANT",
+    bossPhase: 4,
     enemyLevel: 1,
     dropItemId: "broken-metronome",
     storyText: "最初の音は、もう壊れていた。",
   },
   {
     name: "STATIC RHYTHM",
-    boss: "NOISE CONDUCTOR",
-    bossPhase: 0,
+    boss: "RESONANCE",
+    bossPhase: 4,
     enemyLevel: 2,
     dropItemId: "white-noise-core",
     storyText: "リズムは、静かに崩れ始める。",
   },
   {
     name: "WHITE REQUIEM",
-    boss: "WHITE REQUIEM",
-    bossPhase: 2,
+    boss: "BROKEN METRONOME",
+    bossPhase: 5,
     enemyLevel: 3,
     dropItemId: "silent-vinyl",
     storyText: "沈黙は、呼吸の仕方を覚えてしまった。",
@@ -596,6 +591,11 @@ class MonochromeAudio {
     this.tone(292, 0.38, 0.06, "triangle", this.delay, 0.04);
   }
 
+  metronomeTick(accent = false) {
+    this.tone(accent ? 980 : 760, 0.035, accent ? 0.12 : 0.08, "square", this.sfx);
+    this.tone(accent ? 196 : 147, 0.11, 0.035, "sine", this.delay, 0.015);
+  }
+
   dodge() {
     this.tone(520, 0.08, 0.06, "sine", this.sfx);
     this.tone(1040, 0.11, 0.025, "triangle", this.delay, 0.03);
@@ -673,6 +673,10 @@ class MonochromeAudio {
     this.tone(drone[note], 1.6, this.bossLayer ? 0.08 : 0.055, "sine", this.bgm);
     if (note === 1) this.tone(196, 1.2, 0.026, "sine", this.delay, 0.2);
     if (note === 3) this.noise(0.34, this.bossLayer ? 0.044 : 0.026, 720, this.bgm);
+    if (this.bossLayer) {
+      this.tone(note === 0 ? 880 : 660, 0.028, note === 0 ? 0.045 : 0.026, "square", this.bgm, 0.02);
+      if (note === 2) this.pianoTone(220, 1.1, 0.026, this.delay, 0.12);
+    }
   }
 
   private playHomePianoStep() {
@@ -1690,6 +1694,7 @@ function GameScreen({
         silenceAmount: initialStageIndex === 2 ? 0.18 : 0,
         freezeClock: 0,
         freezeCooldown: 11,
+        freezeReason: null,
         shake: 0,
         gameOver: false,
         nextId: 1,
@@ -2033,6 +2038,7 @@ function GameScreen({
     state.fireClock = 0;
     state.freezeClock = 0;
     state.freezeCooldown = state.stageIndex === 2 ? 8 : 11;
+    state.freezeReason = null;
     state.silenceAmount = state.stageIndex === 2 ? 0.18 : 0;
     state.bannerText = `STAGE ${state.stageIndex + 1}  ${STAGES[state.stageIndex].name}`;
     state.bannerClock = 2;
@@ -2059,8 +2065,11 @@ function GameScreen({
       const previous = state.freezeClock;
       state.freezeClock = Math.max(0, state.freezeClock - dt);
       if (previous > 0 && state.freezeClock === 0) {
-        state.bannerText = "TIME RELEASE";
-        state.bannerClock = 0.9;
+        if (state.freezeReason === "stop") {
+          state.bannerText = "TIME RELEASE";
+          state.bannerClock = 0.9;
+        }
+        state.freezeReason = null;
         addRipple(state, state.width / 2, state.height / 2, 460, "wave");
       }
       return;
@@ -2071,6 +2080,7 @@ function GameScreen({
     if (state.freezeCooldown <= 0 && state.freezeClock <= 0) {
       state.freezeClock = 2.25;
       state.freezeCooldown = 12;
+      state.freezeReason = "stop";
       state.bannerText = "TIME STOPS";
       state.bannerClock = 1.4;
       addRipple(state, state.width / 2, state.height / 2, 360, "wave");
@@ -2120,14 +2130,14 @@ function GameScreen({
 
   function spawnBoss(state: GameState) {
     const stage = STAGES[state.stageIndex];
-    const baseHp = [1280, 1780, 2900][state.stageIndex];
+    const baseHp = [1380, 1880, 3050][state.stageIndex];
     const maxHp = baseHp + (state.runLoop - 1) * 360;
     state.boss = {
       id: state.nextId++,
       name: stage.boss,
       x: state.width / 2,
-      y: 125,
-      radius: 45 + state.stageIndex * 5,
+      y: state.stageIndex === 2 ? 138 : 125,
+      radius: state.stageIndex === 2 ? 58 : 48 + state.stageIndex * 6,
       hp: maxHp,
       maxHp,
       attack: 1.3,
@@ -2153,6 +2163,21 @@ function GameScreen({
     state.shake = 2;
     audioRef.current.setGameStage(state.stageIndex, true);
     audioRef.current.boss();
+    if (state.stageIndex === 2) {
+      const introBossId = state.boss.id;
+      state.freezeClock = 1.65;
+      state.freezeCooldown = 8.4;
+      state.freezeReason = "intro";
+      state.bannerText = "";
+      [0, 820, 1180, 1540].forEach((delay, index) => {
+        window.setTimeout(() => {
+          const live = stateRef.current;
+          if (live && live.boss?.id === introBossId && !live.gameOver) {
+            audioRef.current.metronomeTick(index === 0);
+          }
+        }, delay);
+      });
+    }
   }
 
   function updateBoss(state: GameState, dt: number) {
@@ -2160,9 +2185,9 @@ function GameScreen({
     if (state.freezeClock > 0) return;
     const boss = state.boss;
     const hpRatio = boss.hp / boss.maxHp;
-    const enrage = hpRatio < 0.35 ? 2 : hpRatio < 0.68 ? 1 : 0;
+    const enrage = hpRatio < 0.25 ? 2 : hpRatio < 0.5 ? 1 : 0;
     const time = state.bossElapsed;
-    const motionScale = boss.phase === 2 ? 0.78 : 1;
+    const motionScale = boss.phase === 5 ? 0.72 : 1;
     const targetX =
       state.width / 2 +
       Math.sin(time * (0.62 + enrage * 0.12) + boss.phase * 1.8) *
@@ -2200,8 +2225,8 @@ function GameScreen({
   }
 
   function bossCooldown(state: GameState, enrage: number) {
-    const base = state.stageIndex === 0 ? 1.35 : state.stageIndex === 1 ? 1.05 : 1.2;
-    return clamp(base - enrage * 0.18 - state.runLoop * 0.02, 0.78, base);
+    const base = state.stageIndex === 0 ? 1.55 : state.stageIndex === 1 ? 1.28 : 1.16;
+    return clamp(base - enrage * 0.2 - state.runLoop * 0.02, state.stageIndex === 2 ? 0.74 : 0.86, base);
   }
 
   function beginBossTelegraph(state: GameState, boss: Boss, enrage: number) {
@@ -2215,13 +2240,14 @@ function GameScreen({
     boss.rhythmIndex += 1;
     addRipple(state, boss.x, boss.y, 78 + state.stageIndex * 18, "spark");
     state.shake = settings.reducedMotion ? 0 : 0.45 + enrage * 0.3;
+    if (state.stageIndex === 2) audioRef.current.metronomeTick(boss.rhythmIndex % 4 === 1);
     audioRef.current.wavePulse();
   }
 
   function chooseBossPattern(state: GameState, boss: Boss, enrage: number) {
     if (state.stageIndex === 0) return boss.rhythmIndex % 3 === 2 && enrage > 0 ? 1 : 0;
-    if (state.stageIndex === 1) return boss.rhythmIndex % 3;
-    return boss.rhythmIndex % 4;
+    if (state.stageIndex === 1) return boss.rhythmIndex % 4;
+    return boss.rhythmIndex % 3;
   }
 
   function fireBossPattern(state: GameState, boss: Boss, enrage: number) {
@@ -2237,74 +2263,89 @@ function GameScreen({
 
   function fireStageOneBoss(state: GameState, boss: Boss, enrage: number) {
     if (boss.pattern === 1) {
-      [-0.12, 0.12].forEach((offset, index) => {
+      [-0.24, 0, 0.24].forEach((offset, index) => {
         window.setTimeout(() => {
           const live = stateRef.current;
           if (live?.boss?.id === boss.id && !live.gameOver) {
-            spawnBossLaser(live, boss.x, boss.y, boss.targetAngle + offset, 18, 10, 0.5);
+            spawnWaveHazard(live, boss.x, boss.y, boss.targetAngle + offset, 136 + enrage * 16, 11, 9);
           }
-        }, index * 180);
+        }, index * 160);
       });
       return;
     }
-    spawnBossLaser(state, boss.x, boss.y, boss.targetAngle, 20, 10, 0.55);
+    spawnWaveHazard(state, boss.x, boss.y, boss.targetAngle, 124 + enrage * 12, 12, 9);
+    window.setTimeout(() => {
+      const live = stateRef.current;
+      if (live?.boss?.id === boss.id && !live.gameOver) {
+        spawnWaveHazard(live, boss.x, boss.y, boss.targetAngle, 124 + enrage * 12, 12, 9);
+      }
+    }, 240);
   }
 
   function fireStageTwoBoss(state: GameState, boss: Boss, enrage: number) {
     if (boss.pattern === 0) {
-      [-0.34, -0.17, 0, 0.17, 0.34].forEach((offset) => {
-        spawnBossHazard(state, boss.x, boss.y, boss.targetAngle + offset, 126 + enrage * 8, 6);
+      [-0.38, -0.18, 0.18, 0.38].forEach((offset) => {
+        spawnWaveHazard(state, boss.x, boss.y, boss.targetAngle + offset, 132 + enrage * 14, 10, 9);
       });
       return;
     }
     if (boss.pattern === 1) {
-      const side = boss.rhythmIndex % 2 === 0 ? -1 : 1;
-      for (let i = 0; i < 5; i += 1) {
-        const y = 150 + i * 82;
-        spawnBossLaser(state, side < 0 ? 0 : state.width, y, side < 0 ? 0 : Math.PI, 16, 10, 0.42);
-      }
-      return;
-    }
-    const aim = normalize(state.player.x - boss.x, state.player.y - boss.y);
-    boss.x += aim.x * 70;
-    boss.y += aim.y * 28;
-    spawnBossLaser(state, boss.x, boss.y, boss.targetAngle, 20, 10, 0.48);
-  }
-
-  function fireStageThreeBoss(state: GameState, boss: Boss, enrage: number) {
-    if (boss.pattern === 0) {
-      [-0.22, 0, 0.22].forEach((offset) => {
-        spawnBossHazard(state, boss.x, boss.y, boss.targetAngle + offset, 112 + enrage * 8, 6);
-      });
-      return;
-    }
-    if (boss.pattern === 1) {
-      const gap = boss.rhythmIndex % 4;
-      for (let i = 0; i < 8; i += 1) {
-        if (i === gap || i === (gap + 1) % 8) continue;
-        const angle = (Math.PI * 2 * i) / 8;
-        spawnBossHazard(state, boss.x, boss.y, angle, 104 + enrage * 10, 6);
+      const lanes = [0.22, 0.38, 0.54, 0.7];
+      const gap = boss.rhythmIndex % lanes.length;
+      for (let i = 0; i < lanes.length; i += 1) {
+        if (i === gap) continue;
+        const y = state.height * lanes[i];
+        spawnWaveHazard(state, boss.x, boss.y, Math.atan2(y - boss.y, state.width * 0.5 - boss.x), 118 + enrage * 16, 13, 10);
       }
       return;
     }
     if (boss.pattern === 2) {
-      const x = boss.targetX;
-      for (let i = 0; i < 5; i += 1) {
-        const offset = (i - 2) * 34;
-        spawnBossLaser(state, x + offset, 72, Math.PI / 2, 16, 10, 0.44);
-      }
+      [-0.28, 0, 0.28].forEach((offset, index) => {
+        window.setTimeout(() => {
+          const live = stateRef.current;
+          if (live?.boss?.id === boss.id && !live.gameOver) {
+            spawnWaveHazard(live, boss.x, boss.y, boss.targetAngle + offset, 146 + enrage * 12, 11, 10);
+          }
+        }, index * 210);
+      });
       return;
     }
-    spawnBossLaser(
-      state,
-      boss.x,
-      boss.y,
-      boss.targetAngle - 0.18,
-      25,
-      10,
-      0.82,
-      boss.rhythmIndex % 2 === 0 ? 0.42 : -0.42,
-    );
+    for (let i = 0; i < 5 + enrage; i += 1) {
+      const angle = -Math.PI * 0.82 + (Math.PI * 0.64 * i) / (4 + enrage);
+      spawnWaveHazard(state, boss.x, boss.y, angle, 112 + enrage * 12, 12, 9);
+    }
+  }
+
+  function fireStageThreeBoss(state: GameState, boss: Boss, enrage: number) {
+    if (boss.pattern === 0) {
+      const count = enrage > 0 ? 8 : 6;
+      for (let i = 0; i < count; i += 1) {
+        const angle = Math.PI * 0.18 + (Math.PI * 0.64 * i) / (count - 1);
+        spawnWaveHazard(state, boss.x, boss.y, angle, 104 + enrage * 14, 14, 9);
+      }
+      audioRef.current.metronomeTick(true);
+      return;
+    }
+    if (boss.pattern === 1) {
+      const swing = boss.rhythmIndex % 2 === 0 ? -1 : 1;
+      const angle = Math.PI / 2 + swing * (0.5 + enrage * 0.08);
+      spawnBossLaser(state, boss.x, boss.y + boss.radius * 0.2, angle, 24 + enrage * 2, 10, 0.72);
+      audioRef.current.metronomeTick(true);
+      return;
+    }
+    const swing = boss.rhythmIndex % 2 === 0 ? -1 : 1;
+    const angle = Math.PI / 2 + swing * (0.62 + enrage * 0.08);
+    spawnBossLaser(state, boss.x, boss.y + boss.radius * 0.2, angle, 26, 10, 0.86, swing * 0.26);
+    [150, enrage > 0 ? 360 : 460].forEach((delay, index) => {
+      window.setTimeout(() => {
+        const live = stateRef.current;
+        if (live?.boss?.id === boss.id && !live.gameOver) {
+          const offset = index === 0 ? -0.18 * swing : 0.18 * swing;
+          spawnWaveHazard(live, boss.x, boss.y, Math.PI / 2 + offset, 124 + enrage * 16, 15, 9);
+          audioRef.current.metronomeTick(index === 1);
+        }
+      }, delay);
+    });
   }
 
   function spawnBossLaser(
@@ -2331,6 +2372,31 @@ function GameScreen({
       length: Math.hypot(state.width, state.height) + 160,
       width,
       angularVelocity,
+    });
+    audioRef.current.wavePulse();
+  }
+
+  function spawnWaveHazard(
+    state: GameState,
+    x: number,
+    y: number,
+    angle: number,
+    speed: number,
+    radius: number,
+    damage: number,
+  ) {
+    state.hazards.push({
+      id: state.nextId++,
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      radius,
+      damage,
+      life: 7.5,
+      kind: "wave",
+      angle,
+      width: radius * 2.2,
     });
     audioRef.current.wavePulse();
   }
@@ -2926,7 +2992,7 @@ function drawBossTelegraph(
   ctx.stroke();
 
   if (state.stageIndex === 0) {
-    const offsets = boss.pattern === 1 ? [-0.12, 0.12] : [0];
+    const offsets = boss.pattern === 1 ? [-0.24, 0, 0.24] : [0];
     offsets.forEach((offset) =>
       drawTelegraphLine(
         ctx,
@@ -2940,22 +3006,38 @@ function drawBossTelegraph(
     );
   } else if (state.stageIndex === 1) {
     if (boss.pattern === 1) {
-      const side = boss.rhythmIndex % 2 === 0 ? 0 : state.width;
-      const angle = side === 0 ? 0 : Math.PI;
-      for (let i = 0; i < 5; i += 1) {
-        const y = 150 + i * 82;
-        drawTelegraphLine(ctx, side, y, angle, state.width, alpha * 1.12, 16);
+      const lanes = [0.22, 0.38, 0.54, 0.7];
+      const gap = boss.rhythmIndex % lanes.length;
+      for (let i = 0; i < lanes.length; i += 1) {
+        if (i === gap) continue;
+        const y = state.height * lanes[i];
+        drawTelegraphLine(
+          ctx,
+          boss.x,
+          boss.y,
+          Math.atan2(y - boss.y, state.width * 0.5 - boss.x),
+          Math.hypot(state.width, state.height),
+          alpha * 1.02,
+          14,
+        );
       }
     } else if (boss.pattern === 2) {
-      drawTelegraphLine(
-        ctx,
-        boss.x,
-        boss.y,
-        boss.targetAngle,
-        Math.hypot(state.width, state.height),
-        alpha * 1.1,
-        20,
+      [-0.28, 0, 0.28].forEach((offset) =>
+        drawTelegraphLine(
+          ctx,
+          boss.x,
+          boss.y,
+          boss.targetAngle + offset,
+          Math.hypot(state.width, state.height),
+          alpha * 1.1,
+          12,
+        ),
       );
+    } else if (boss.pattern === 3) {
+      for (let i = 0; i < 5; i += 1) {
+        const angle = -Math.PI * 0.82 + (Math.PI * 0.64 * i) / 4;
+        drawTelegraphLine(ctx, boss.x, boss.y, angle, Math.hypot(state.width, state.height), alpha * 0.88, 12);
+      }
     } else {
       [-0.34, -0.17, 0, 0.17, 0.34].forEach((offset) => {
         drawTelegraphLine(
@@ -2969,42 +3051,35 @@ function drawBossTelegraph(
         );
       });
     }
-  } else if (boss.pattern === 2) {
-    for (let i = 0; i < 5; i += 1) {
-      const offset = (i - 2) * 34;
-      drawTelegraphLine(ctx, boss.targetX + offset, 72, Math.PI / 2, state.height, alpha, 16);
-    }
   } else if (boss.pattern === 1) {
-    const gap = boss.rhythmIndex % 4;
-    for (let i = 0; i < 8; i += 1) {
-      if (i === gap || i === (gap + 1) % 8) continue;
-      drawTelegraphLine(ctx, boss.x, boss.y, (Math.PI * 2 * i) / 8, state.width, alpha * 0.75, 7);
-    }
+    const swing = boss.rhythmIndex % 2 === 0 ? -1 : 1;
+    drawTelegraphLine(
+      ctx,
+      boss.x,
+      boss.y + boss.radius * 0.2,
+      Math.PI / 2 + swing * 0.5,
+      Math.hypot(state.width, state.height),
+      alpha * 1.18,
+      25,
+    );
+  } else if (boss.pattern === 2) {
+    const swing = boss.rhythmIndex % 2 === 0 ? -1 : 1;
+    [-0.16, 0, 0.16].forEach((offset, index) =>
+      drawTelegraphLine(
+        ctx,
+        boss.x,
+        boss.y + boss.radius * 0.2,
+        Math.PI / 2 + swing * 0.62 + offset,
+        Math.hypot(state.width, state.height),
+        alpha * (index === 1 ? 1.2 : 0.58),
+        index === 1 ? 26 : 10,
+      ),
+    );
   } else {
-    if (boss.pattern === 3) {
-      [-0.18, 0, 0.18].forEach((offset, index) => {
-        drawTelegraphLine(
-          ctx,
-          boss.x,
-          boss.y,
-          boss.targetAngle + offset,
-          Math.hypot(state.width, state.height),
-          alpha * (index === 1 ? 1.15 : 0.46),
-          index === 1 ? 25 : 9,
-        );
-      });
-    } else {
-      [-0.22, 0, 0.22].forEach((offset) => {
-        drawTelegraphLine(
-          ctx,
-          boss.x,
-          boss.y,
-          boss.targetAngle + offset,
-          Math.hypot(state.width, state.height),
-          alpha,
-          9,
-        );
-      });
+    const count = 6;
+    for (let i = 0; i < count; i += 1) {
+      const angle = Math.PI * 0.18 + (Math.PI * 0.64 * i) / (count - 1);
+      drawTelegraphLine(ctx, boss.x, boss.y, angle, Math.hypot(state.width, state.height), alpha * 0.78, 13);
     }
   }
   ctx.restore();
@@ -3128,6 +3203,10 @@ function drawHazards(ctx: CanvasRenderingContext2D, state: GameState) {
       drawLaser(ctx, hazard);
       continue;
     }
+    if (hazard.kind === "wave") {
+      drawWaveHazard(ctx, hazard);
+      continue;
+    }
     ctx.strokeStyle = "rgba(255,255,255,0.46)";
     ctx.beginPath();
     ctx.arc(hazard.x, hazard.y, hazard.radius, 0, Math.PI * 2);
@@ -3137,6 +3216,39 @@ function drawHazards(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.quadraticCurveTo(hazard.x, hazard.y - 8, hazard.x + 5, hazard.y);
     ctx.stroke();
   }
+}
+
+function drawWaveHazard(ctx: CanvasRenderingContext2D, hazard: Hazard) {
+  const angle = hazard.angle ?? 0;
+  const pulse = Math.sin(hazard.life * 9 + hazard.id) * 3;
+  const width = hazard.width ?? hazard.radius * 2.2;
+
+  ctx.save();
+  ctx.translate(hazard.x, hazard.y);
+  ctx.rotate(angle);
+  ctx.strokeStyle = "rgba(255,255,255,0.62)";
+  ctx.lineWidth = 1.6;
+  ctx.shadowColor = "rgba(255,255,255,0.34)";
+  ctx.shadowBlur = 8;
+
+  ctx.beginPath();
+  for (let i = 0; i <= 7; i += 1) {
+    const t = i / 7;
+    const x = -width * 0.5 + t * width;
+    const y = Math.sin(t * Math.PI * 2.4 + hazard.life * 10) * (hazard.radius * 0.42 + pulse * 0.18);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,255,255,0.24)";
+  for (let r = 1.05; r <= 1.65; r += 0.3) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, width * 0.32 * r, hazard.radius * 0.68 * r, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawLaser(ctx: CanvasRenderingContext2D, hazard: Hazard) {
@@ -3371,7 +3483,7 @@ function drawBoss(
   elapsed: number,
 ) {
   const hpRatio = boss.hp / boss.maxHp;
-  const enrage = hpRatio < 0.35 ? 2 : hpRatio < 0.68 ? 1 : 0;
+  const enrage = hpRatio < 0.25 ? 2 : hpRatio < 0.5 ? 1 : 0;
   const telegraphProgress =
     boss.telegraphDuration > 0 && boss.telegraphClock > 0
       ? 1 - boss.telegraphClock / boss.telegraphDuration
@@ -3433,11 +3545,90 @@ function drawBoss(
     ctx.stroke();
   }
 
-  ctx.rotate(
-    elapsed * (boss.phase % 2 === 0 ? 0.45 + enrage * 0.15 : -0.45 - enrage * 0.15) +
-      telegraphProgress * (boss.phase % 2 === 0 ? 0.55 : -0.55),
-  );
-  if (boss.phase === 0) {
+  const bodyRotation =
+    boss.phase === 4
+      ? Math.sin(elapsed * 0.72) * 0.08 + telegraphProgress * 0.08
+      : boss.phase === 5
+        ? Math.sin(elapsed * 0.44) * 0.035
+        : elapsed * (boss.phase % 2 === 0 ? 0.45 + enrage * 0.15 : -0.45 - enrage * 0.15) +
+          telegraphProgress * (boss.phase % 2 === 0 ? 0.55 : -0.55);
+  ctx.rotate(bodyRotation);
+  if (boss.phase === 4) {
+    const waveAmp = boss.radius * (0.34 + enrage * 0.04 + telegraphProgress * 0.08);
+    ctx.fillStyle = `rgba(255,255,255,${0.04 + enrage * 0.03 + telegraphProgress * 0.04})`;
+    ctx.strokeStyle = `rgba(255,255,255,${0.7 + enrage * 0.08})`;
+    for (let layer = 0; layer < 4; layer += 1) {
+      ctx.beginPath();
+      for (let i = 0; i <= 36; i += 1) {
+        const t = i / 36;
+        const x = -boss.radius * 1.45 + t * boss.radius * 2.9;
+        const y =
+          Math.sin(t * Math.PI * (2.2 + layer * 0.42) + elapsed * (1.7 + layer * 0.25)) *
+            (waveAmp - layer * 4) +
+          Math.sin(t * Math.PI * 7 + elapsed * 3.1 + layer) * (2 + enrage * 1.5);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let i = 0; i <= 44; i += 1) {
+      const t = i / 44;
+      const x = -boss.radius * 1.55 + t * boss.radius * 3.1;
+      const y =
+        Math.sin(t * Math.PI * 2.6 + elapsed * 1.4) * waveAmp +
+        Math.sin(t * Math.PI * 11 + elapsed * 4.4) * (3 + enrage * 2);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = 44; i >= 0; i -= 1) {
+      const t = i / 44;
+      const x = -boss.radius * 1.55 + t * boss.radius * 3.1;
+      const y =
+        Math.sin(t * Math.PI * 2.6 + elapsed * 1.4) * waveAmp -
+        boss.radius * (0.44 + enrage * 0.03) +
+        Math.sin(t * Math.PI * 9 + elapsed * 3.2) * 2;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (boss.phase === 5) {
+    const swing = Math.sin(elapsed * (1.8 + enrage * 0.35) + boss.rhythmIndex * 0.42);
+    ctx.strokeStyle = `rgba(255,255,255,${0.78 + enrage * 0.08})`;
+    ctx.fillStyle = `rgba(255,255,255,${0.045 + enrage * 0.02})`;
+    ctx.beginPath();
+    ctx.moveTo(0, -boss.radius * 1.18);
+    ctx.lineTo(-boss.radius * 0.78, boss.radius * 0.92);
+    ctx.quadraticCurveTo(0, boss.radius * 1.14, boss.radius * 0.78, boss.radius * 0.92);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    for (let i = 0; i < 4; i += 1) {
+      const y = -boss.radius * 0.62 + i * boss.radius * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(-boss.radius * 0.48, y + Math.sin(elapsed * 2 + i) * 2);
+      ctx.lineTo(boss.radius * 0.48, y - Math.sin(elapsed * 2 + i) * 2);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.rotate(swing * (0.54 + enrage * 0.08));
+    ctx.beginPath();
+    ctx.moveTo(0, -boss.radius * 0.78);
+    ctx.lineTo(0, boss.radius * 0.76);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, boss.radius * 0.88, 8 + enrage * 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(0, -boss.radius * 0.82, 6, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (boss.phase === 0) {
     ctx.beginPath();
     ctx.moveTo(0, -boss.radius);
     ctx.lineTo(0, boss.radius);
