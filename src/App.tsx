@@ -4708,262 +4708,461 @@ function drawLaser(ctx: CanvasRenderingContext2D, hazard: Hazard) {
 
 function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState, elapsed: number) {
   for (const enemy of state.enemies) {
-    const hp = enemy.hp / enemy.maxHp;
+    const hp = clamp(enemy.hp / enemy.maxHp, 0, 1);
     ctx.save();
     ctx.translate(enemy.x, enemy.y);
-    const vinylSpin =
+    const baseRotation =
       enemy.kind === 3
         ? elapsed * (enemy.mode === 2 ? 14 : enemy.mode === 1 ? 10 : enemy.mode === 3 ? 1.6 : 3.3) + enemy.pulse
-        : Math.sin(elapsed + enemy.pulse) * 0.2;
-    ctx.rotate(vinylSpin);
-    ctx.strokeStyle = `rgba(255,255,255,${0.32 + hp * 0.45})`;
+        : enemy.kind === 6
+          ? 0
+          : Math.sin(elapsed + enemy.pulse) * 0.12;
+    ctx.rotate(baseRotation);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = `rgba(255,255,255,${0.42 + hp * 0.46})`;
     ctx.lineWidth = 1.5;
 
-    if (enemy.kind === 8) {
-      // Sixty-fourth rest: a fragile pause that briefly heals the player.
-      const glow = 0.42 + Math.sin(elapsed * 3 + enemy.pulse) * 0.12;
-      ctx.shadowColor = "rgba(184,255,166,0.7)";
-      ctx.shadowBlur = 18;
-      ctx.strokeStyle = `rgba(184,255,166,${0.76 + glow * 0.2})`;
-      ctx.fillStyle = `rgba(184,255,166,${0.12 + glow * 0.08})`;
-      ctx.lineWidth = 2;
+    if (enemy.kind === 8) drawRestEnemy(ctx, enemy, elapsed);
+    else if (enemy.kind === 0) drawWaveformEnemy(ctx, enemy, hp, elapsed);
+    else if (enemy.kind === 1) drawDistortedNoteEnemy(ctx, enemy, hp, elapsed);
+    else if (enemy.kind === 2) drawNoiseSpeakerEnemy(ctx, enemy, hp, elapsed);
+    else if (enemy.kind === 3) drawBrokenVinylEnemy(ctx, enemy, hp, elapsed);
+    else if (enemy.kind === 4) drawMetronomeRemnantEnemy(ctx, enemy, hp, elapsed);
+    else if (enemy.kind === 5) drawCableEnemy(ctx, enemy, hp, elapsed);
+    else if (enemy.kind === 6) drawSharpEnemy(ctx, enemy, hp, elapsed);
+    else drawResidualEchoEnemy(ctx, enemy, elapsed);
 
-      for (let ring = 1.1; ring <= 1.7; ring += 0.3) {
-        ctx.beginPath();
-        ctx.ellipse(0, 0, enemy.radius * ring, enemy.radius * 0.52 * ring, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      ctx.beginPath();
-      ctx.moveTo(enemy.radius * 0.28, -enemy.radius * 1.25);
-      ctx.lineTo(-enemy.radius * 0.18, enemy.radius * 1.1);
-      ctx.stroke();
-
-      for (let flag = 0; flag < 4; flag += 1) {
-        const y = -enemy.radius * 0.78 + flag * enemy.radius * 0.36;
-        ctx.beginPath();
-        ctx.moveTo(enemy.radius * 0.22, y);
-        ctx.bezierCurveTo(
-          -enemy.radius * 0.42,
-          y + enemy.radius * 0.02,
-          -enemy.radius * 0.52,
-          y + enemy.radius * 0.32,
-          -enemy.radius * 0.05,
-          y + enemy.radius * 0.42,
-        );
-        ctx.stroke();
-      }
-
-      ctx.beginPath();
-      ctx.arc(-enemy.radius * 0.22, enemy.radius * 1.03, enemy.radius * 0.18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = "rgba(255,255,255,0.72)";
-      for (let i = 0; i < 5; i += 1) {
-        const angle = enemy.pulse + elapsed * 0.8 + (Math.PI * 2 * i) / 5;
-        ctx.beginPath();
-        ctx.arc(Math.cos(angle) * enemy.radius * 1.7, Math.sin(angle) * enemy.radius, 1.3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    } else if (enemy.kind === 0) {
-      // Waveform lifeform: this existing enemy type stays as the baseline noise.
-      ctx.beginPath();
-      for (let i = 0; i < 8; i += 1) {
-        const x = -enemy.radius + i * 4;
-        const y = Math.sin(i + elapsed * 8) * enemy.radius * 0.45;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    } else if (enemy.kind === 1) {
-      // Distorted note.
-      ctx.beginPath();
-      ctx.ellipse(-3, 7, enemy.radius * 0.55, enemy.radius * 0.38, -0.4, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(3, 5);
-      ctx.lineTo(3, -enemy.radius * 1.2);
-      ctx.quadraticCurveTo(10, -enemy.radius * 0.8, 4, -enemy.radius * 0.45);
-      ctx.moveTo(-enemy.radius * 0.7, -2);
-      ctx.lineTo(enemy.radius * 0.65, -7);
-      ctx.stroke();
-    } else if (enemy.kind === 2) {
-      // Noise speaker.
-      ctx.strokeRect(-enemy.radius, -enemy.radius * 0.65, enemy.radius * 2, enemy.radius * 1.3);
-      ctx.beginPath();
-      ctx.arc(0, 0, enemy.radius * 0.42, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, 0, enemy.radius * 0.72 + Math.sin(enemy.pulse) * 2, -0.6, 0.6);
-      ctx.arc(0, 0, enemy.radius * 0.95 + Math.sin(enemy.pulse) * 2, -0.45, 0.45);
-      ctx.stroke();
-    } else if (enemy.kind === 3) {
-      // Broken vinyl: a damaged record disc with grooves, center hole, and a missing shard.
-      const r = enemy.radius * 1.12;
-      const jitter =
-        enemy.mode === 1
-          ? Math.sin(elapsed * 48) * 3.4
-          : enemy.mode === 2
-            ? Math.sin(elapsed * 62) * 4.2
-            : enemy.mode === 3
-              ? Math.sin(elapsed * 18) * 1.4
-              : 0;
-      ctx.save();
-      ctx.shadowColor = "rgba(255,255,255,0.45)";
-      ctx.shadowBlur = enemy.mode === 1 ? 18 : enemy.mode === 2 ? 14 : 7;
-
-      ctx.beginPath();
-      ctx.arc(0, 0, r + jitter, -0.08, Math.PI * 1.52);
-      ctx.lineTo(r * 0.18, r * 0.08);
-      ctx.arc(0, 0, r * 0.58, Math.PI * 1.45, Math.PI * 1.83, true);
-      ctx.lineTo(r * 0.78, -r * 0.2);
-      ctx.arc(0, 0, r + jitter * 0.4, Math.PI * 1.9, Math.PI * 2 - 0.12);
-      ctx.closePath();
-      ctx.fillStyle = "rgba(255,255,255,0.035)";
-      ctx.fill();
-      ctx.stroke();
-
-      for (let groove = 0.34; groove <= 0.86; groove += 0.17) {
-        ctx.beginPath();
-        ctx.arc(0, 0, r * groove + Math.sin(elapsed * 5 + groove * 10) * 0.7, 0.12, Math.PI * 1.46);
-        ctx.stroke();
-      }
-
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.18, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.07, 0, Math.PI * 2);
-      ctx.fillStyle = "#050505";
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(r * 0.1, -r * 0.88);
-      ctx.lineTo(r * 0.32, -r * 0.2);
-      ctx.lineTo(r * 0.72, -r * 0.44);
-      ctx.stroke();
-
-      if (enemy.mode === 1 || enemy.mode === 2) {
-        ctx.strokeStyle = `rgba(255,255,255,${enemy.mode === 2 ? 0.62 : 0.42})`;
-        for (let ring = 1.22; ring <= 1.92; ring += 0.18) {
-          ctx.beginPath();
-          ctx.arc(0, 0, r * ring + Math.sin(elapsed * (enemy.mode === 2 ? 36 : 26) + ring) * 5, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        ctx.beginPath();
-        ctx.moveTo(-r * 1.5, Math.sin(elapsed * 18) * 4);
-        ctx.lineTo(r * 1.5, Math.cos(elapsed * 18) * 4);
-        ctx.stroke();
-      }
-
-      if (enemy.mode === 3) {
-        ctx.strokeStyle = "rgba(255,255,255,0.18)";
-        ctx.beginPath();
-        ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      ctx.restore();
-    } else if (enemy.kind === 4) {
-      // Metronome remnant.
-      ctx.beginPath();
-      ctx.moveTo(0, -enemy.radius);
-      ctx.lineTo(-enemy.radius * 0.7, enemy.radius * 0.8);
-      ctx.lineTo(enemy.radius * 0.7, enemy.radius * 0.8);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, -enemy.radius * 0.55);
-      ctx.lineTo(Math.sin(enemy.pulse * 1.15) * enemy.radius * 0.45, enemy.radius * 0.35);
-      ctx.stroke();
-    } else if (enemy.kind === 5) {
-      // Cable creature.
-      ctx.beginPath();
-      for (let i = 0; i < 9; i += 1) {
-        const t = i / 8;
-        const x = -enemy.radius + t * enemy.radius * 2;
-        const y = Math.sin(enemy.pulse + t * Math.PI * 2) * enemy.radius * 0.52;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(enemy.radius * 0.85, 0, 3, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (enemy.kind === 6) {
-      // Sharp: keep the musical symbol readable, with distortion only around its edge.
-      const r = enemy.radius;
-      const tremor = enemy.mode === 1 ? Math.sin(elapsed * 42) * 0.9 : Math.sin(elapsed * 16 + enemy.pulse) * 0.45;
-      const attackGlow = enemy.mode === 1 || enemy.mode === 2;
-      const tips = getSharpTipOffsets(r);
-      ctx.save();
-      ctx.rotate(enemy.mode === 2 ? enemy.pulse : Math.sin(elapsed * 1.05 + enemy.pulse) * 0.1);
-      ctx.lineCap = "butt";
-      ctx.lineJoin = "miter";
-      ctx.shadowColor = "rgba(255,255,255,0.44)";
-      ctx.shadowBlur = attackGlow ? 13 : 7;
-      ctx.strokeStyle = `rgba(255,255,255,${0.7 + hp * 0.25})`;
-      ctx.lineWidth = 2.35;
-
-      [-0.48, 0.48].forEach((x) => {
-        ctx.beginPath();
-        ctx.moveTo(x * r - r * 0.2 + tremor, -r * 1.42);
-        ctx.lineTo(x * r + r * 0.2 - tremor * 0.35, r * 1.42);
-        ctx.stroke();
-      });
-      [-0.38, 0.38].forEach((y) => {
-        ctx.beginPath();
-        ctx.moveTo(-r * 1.18, y * r + r * 0.18 + tremor * 0.25);
-        ctx.lineTo(r * 1.18, y * r - r * 0.18 - tremor);
-        ctx.stroke();
-      });
-
-      const activeTip = Math.floor((elapsed * 8 + enemy.id) % tips.length);
-      tips.forEach((tip, index) => {
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(255,255,255,${attackGlow && index === activeTip ? 0.9 : 0.42})`;
-        ctx.arc(tip.x, tip.y, attackGlow && index === activeTip ? 2.8 : 1.7, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      ctx.strokeStyle = `rgba(255,255,255,${attackGlow ? 0.28 : 0.12})`;
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 5; i += 1) {
-        const offset = -r * 1.28 + i * r * 0.64;
-        ctx.beginPath();
-        ctx.moveTo(offset, -r * 1.55 + Math.sin(elapsed * 17 + i) * 2);
-        ctx.lineTo(offset + r * 0.34, -r * 1.18 + Math.cos(elapsed * 13 + i) * 1.5);
-        ctx.stroke();
-      }
-
-      if (attackGlow) {
-        ctx.strokeStyle = "rgba(255,255,255,0.42)";
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(-r * 1.72, Math.sin(elapsed * 18) * 2.5);
-        ctx.lineTo(r * 1.72, Math.cos(elapsed * 18) * 2.5);
-        ctx.stroke();
-      }
-      ctx.restore();
-    } else {
-      // Residual monochrome echo.
-      ctx.beginPath();
-      for (let i = 0; i < 5; i += 1) {
-        const angle = (Math.PI * 2 * i) / 5 + elapsed;
-        const r = i % 2 ? enemy.radius * 0.5 : enemy.radius;
-        const x = Math.cos(angle) * r;
-        const y = Math.sin(angle) * r;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-    }
     ctx.restore();
   }
+}
+
+function drawRestEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, elapsed: number) {
+  const glow = 0.42 + Math.sin(elapsed * 3 + enemy.pulse) * 0.12;
+  ctx.shadowColor = "rgba(184,255,166,0.7)";
+  ctx.shadowBlur = 18;
+  ctx.strokeStyle = `rgba(184,255,166,${0.76 + glow * 0.2})`;
+  ctx.fillStyle = `rgba(184,255,166,${0.12 + glow * 0.08})`;
+  ctx.lineWidth = 2;
+
+  for (let ring = 1.1; ring <= 1.7; ring += 0.3) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, enemy.radius * ring, enemy.radius * 0.52 * ring, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(enemy.radius * 0.28, -enemy.radius * 1.25);
+  ctx.lineTo(-enemy.radius * 0.18, enemy.radius * 1.1);
+  ctx.stroke();
+
+  for (let flag = 0; flag < 4; flag += 1) {
+    const y = -enemy.radius * 0.78 + flag * enemy.radius * 0.36;
+    ctx.beginPath();
+    ctx.moveTo(enemy.radius * 0.22, y);
+    ctx.bezierCurveTo(
+      -enemy.radius * 0.42,
+      y + enemy.radius * 0.02,
+      -enemy.radius * 0.52,
+      y + enemy.radius * 0.32,
+      -enemy.radius * 0.05,
+      y + enemy.radius * 0.42,
+    );
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.arc(-enemy.radius * 0.22, enemy.radius * 1.03, enemy.radius * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  drawNoiseDust(ctx, enemy.radius * 1.8, elapsed, enemy.id, 5, 0.72, "rgba(255,255,255,");
+}
+
+function drawWaveformEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, hp: number, elapsed: number) {
+  const r = enemy.radius * 1.28;
+  const pulse = 1 + Math.sin(elapsed * 3 + enemy.pulse) * 0.05;
+  const amp = r * (0.42 + Math.sin(elapsed * 2.1 + enemy.id) * 0.04);
+  const width = r * 3.15;
+
+  ctx.save();
+  ctx.scale(pulse, 1 / pulse);
+  ctx.shadowColor = "rgba(255,255,255,0.5)";
+  ctx.shadowBlur = 11;
+  ctx.fillStyle = "rgba(255,255,255,0.035)";
+  ctx.strokeStyle = `rgba(255,255,255,${0.58 + hp * 0.28})`;
+  ctx.lineWidth = 1.8;
+
+  ctx.beginPath();
+  for (let i = 0; i <= 48; i += 1) {
+    const t = i / 48;
+    const x = -width / 2 + t * width;
+    const envelope = Math.sin(t * Math.PI);
+    const y =
+      Math.sin(t * Math.PI * 3.5 + elapsed * 2.6 + enemy.pulse) * amp * envelope -
+      r * 0.3 * envelope;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  for (let i = 48; i >= 0; i -= 1) {
+    const t = i / 48;
+    const x = -width / 2 + t * width;
+    const envelope = Math.sin(t * Math.PI);
+    const y =
+      Math.sin(t * Math.PI * 3.5 + elapsed * 2.6 + enemy.pulse) * amp * envelope +
+      r * 0.3 * envelope +
+      Math.sin(t * Math.PI * 15 + elapsed * 6) * r * 0.05;
+    ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.shadowBlur = 5;
+  ctx.lineWidth = 1.1;
+  for (let layer = 0; layer < 3; layer += 1) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.32 - layer * 0.07})`;
+    drawMiniWavePath(ctx, width * (0.86 - layer * 0.12), amp * (0.48 + layer * 0.12), elapsed + layer, enemy.pulse + layer);
+    ctx.stroke();
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,255,255,0.16)";
+  for (let ring = 1.05; ring <= 1.55; ring += 0.25) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, width * 0.24 * ring, r * 0.52 * ring, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  drawNoiseDust(ctx, r * 1.7, elapsed, enemy.id, 7, 0.26);
+  ctx.restore();
+}
+
+function drawDistortedNoteEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, hp: number, elapsed: number) {
+  const r = enemy.radius * 1.18;
+  const charge = enemy.telegraph ? 1 : 0;
+  const bend = Math.sin(elapsed * 3.4 + enemy.pulse) * 2.2;
+
+  ctx.save();
+  ctx.translate(0, Math.sin(elapsed * 2 + enemy.id) * 1.8);
+  ctx.shadowColor = "rgba(255,255,255,0.52)";
+  ctx.shadowBlur = charge ? 18 : 8;
+  ctx.strokeStyle = `rgba(255,255,255,${0.6 + hp * 0.28 + charge * 0.1})`;
+  ctx.fillStyle = `rgba(255,255,255,${0.04 + charge * 0.035})`;
+  ctx.lineWidth = 2;
+
+  if (charge) {
+    ctx.strokeStyle = "rgba(255,255,255,0.34)";
+    for (let i = 0; i < 3; i += 1) {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * (1.58 - i * 0.3), r * (0.62 - i * 0.08), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = `rgba(255,255,255,${0.78 + hp * 0.12})`;
+  }
+
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.34, r * 0.46, r * 0.56, r * 0.36, -0.42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#050505";
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.34, r * 0.46, r * 0.25, r * 0.14, -0.42, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.72 + charge * 0.18})`;
+  ctx.beginPath();
+  ctx.moveTo(r * 0.1 + bend * 0.15, r * 0.28);
+  ctx.lineTo(r * 0.18 - bend * 0.12, -r * 1.34);
+  ctx.quadraticCurveTo(r * 0.74 + bend, -r * 0.94, r * 0.3, -r * 0.52);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.28 + charge * 0.24})`;
+  ctx.lineWidth = 1.1;
+  for (let i = 0; i < 4; i += 1) {
+    const y = -r * 0.62 + i * r * 0.24;
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.12, y + Math.sin(elapsed * 8 + i) * 1.5);
+    ctx.lineTo(r * 0.92, y - Math.cos(elapsed * 7 + i) * 1.5);
+    ctx.stroke();
+  }
+  drawNoiseDust(ctx, r * 1.55, elapsed, enemy.id + 11, 8, charge ? 0.38 : 0.22);
+  ctx.restore();
+}
+
+function drawNoiseSpeakerEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, hp: number, elapsed: number) {
+  const r = enemy.radius * 1.12;
+  const pulse = Math.sin(elapsed * 4 + enemy.pulse) * 2.2;
+  ctx.save();
+  ctx.shadowColor = "rgba(255,255,255,0.42)";
+  ctx.shadowBlur = 9;
+  ctx.strokeStyle = `rgba(255,255,255,${0.54 + hp * 0.3})`;
+  ctx.fillStyle = "rgba(255,255,255,0.035)";
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-r * 1.05, -r * 0.72);
+  ctx.lineTo(r * 0.78, -r * 0.62);
+  ctx.lineTo(r * 1.04, r * 0.58);
+  ctx.lineTo(-r * 0.88, r * 0.76);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  for (let ring = 0.36; ring <= 0.82; ring += 0.23) {
+    ctx.beginPath();
+    ctx.arc(0, 0, r * ring + pulse * 0.2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(255,255,255,0.2)";
+  for (let i = 0; i < 3; i += 1) {
+    ctx.beginPath();
+    ctx.arc(r * 0.7, 0, r * (0.6 + i * 0.24) + pulse, -0.52, 0.52);
+    ctx.stroke();
+  }
+  drawNoiseDust(ctx, r * 1.35, elapsed, enemy.id + 21, 5, 0.24);
+  ctx.restore();
+}
+
+function drawBrokenVinylEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, hp: number, elapsed: number) {
+  const r = enemy.radius * 1.2;
+  const charging = enemy.mode === 1;
+  const dashing = enemy.mode === 2;
+  const jitter = charging ? Math.sin(elapsed * 48) * 2.6 : dashing ? Math.sin(elapsed * 64) * 3.4 : 0;
+
+  ctx.save();
+  ctx.shadowColor = "rgba(255,255,255,0.48)";
+  ctx.shadowBlur = charging ? 20 : dashing ? 16 : 8;
+  ctx.strokeStyle = `rgba(255,255,255,${0.58 + hp * 0.3})`;
+  ctx.fillStyle = "rgba(255,255,255,0.035)";
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+  ctx.arc(0, 0, r + jitter, 0.18, Math.PI * 1.42);
+  ctx.lineTo(r * 0.16, r * 0.18);
+  ctx.lineTo(r * 0.68, -r * 0.32);
+  ctx.arc(0, 0, r + jitter * 0.35, Math.PI * 1.86, Math.PI * 2.04);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.lineWidth = 1;
+  for (let groove = 0.34; groove <= 0.9; groove += 0.14) {
+    ctx.beginPath();
+    ctx.arc(0, 0, r * groove + Math.sin(elapsed * 5 + groove * 12) * 0.8, 0.28, Math.PI * 1.37);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.22, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "#050505";
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(255,255,255,${charging || dashing ? 0.55 : 0.25})`;
+  ctx.lineWidth = 1.3;
+  [
+    [0.18, -0.86, 0.38, -0.18, 0.72, -0.44],
+    [-0.58, 0.4, -0.08, 0.18, -0.38, 0.82],
+  ].forEach(([x1, y1, x2, y2, x3, y3]) => {
+    ctx.beginPath();
+    ctx.moveTo(r * x1, r * y1);
+    ctx.lineTo(r * x2, r * y2);
+    ctx.lineTo(r * x3, r * y3);
+    ctx.stroke();
+  });
+
+  if (charging || dashing) {
+    ctx.strokeStyle = `rgba(255,255,255,${dashing ? 0.62 : 0.38})`;
+    for (let ring = 1.2; ring <= 1.85; ring += 0.18) {
+      ctx.beginPath();
+      ctx.arc(0, 0, r * ring + Math.sin(elapsed * (dashing ? 35 : 24) + ring) * 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.55, Math.sin(elapsed * 18) * 3);
+    ctx.lineTo(r * 1.55, Math.cos(elapsed * 18) * 3);
+    ctx.stroke();
+  }
+  drawNoiseDust(ctx, r * 1.42, elapsed, enemy.id + 31, 6, dashing ? 0.34 : 0.2);
+  ctx.restore();
+}
+
+function drawMetronomeRemnantEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, hp: number, elapsed: number) {
+  const r = enemy.radius * 1.18;
+  const swing = Math.sin(enemy.pulse * 1.15 + elapsed * 0.8) * r * 0.44;
+  ctx.save();
+  ctx.shadowColor = "rgba(255,255,255,0.38)";
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = "rgba(255,255,255,0.03)";
+  ctx.strokeStyle = `rgba(255,255,255,${0.56 + hp * 0.3})`;
+  ctx.lineWidth = 1.7;
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 1.1);
+  ctx.lineTo(-r * 0.74, r * 0.86);
+  ctx.lineTo(r * 0.74, r * 0.86);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.58);
+  ctx.lineTo(swing, r * 0.42);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(swing, r * 0.45, r * 0.12, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.16)";
+  for (let i = 0; i < 4; i += 1) {
+    const y = -r * 0.4 + i * r * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.32, y);
+    ctx.lineTo(r * 0.32, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCableEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, hp: number, elapsed: number) {
+  const r = enemy.radius * 1.12;
+  ctx.save();
+  ctx.shadowColor = "rgba(255,255,255,0.34)";
+  ctx.shadowBlur = 7;
+  ctx.strokeStyle = `rgba(255,255,255,${0.52 + hp * 0.3})`;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  for (let i = 0; i < 14; i += 1) {
+    const t = i / 13;
+    const x = -r * 1.34 + t * r * 2.68;
+    const y = Math.sin(enemy.pulse + elapsed * 2.2 + t * Math.PI * 3) * r * 0.46;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.lineWidth = 1.2;
+  [-1, 1].forEach((side) => {
+    ctx.beginPath();
+    ctx.arc(side * r * 1.12, Math.sin(elapsed * 2 + side) * r * 0.18, r * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  drawNoiseDust(ctx, r * 1.5, elapsed, enemy.id + 41, 5, 0.2);
+  ctx.restore();
+}
+
+function drawSharpEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, hp: number, elapsed: number) {
+  const r = enemy.radius * 1.08;
+  const tremor = enemy.mode === 1 ? Math.sin(elapsed * 42) * 0.9 : Math.sin(elapsed * 16 + enemy.pulse) * 0.45;
+  const attackGlow = enemy.mode === 1 || enemy.mode === 2;
+  const tips = getSharpTipOffsets(r);
+  ctx.save();
+  ctx.rotate(enemy.mode === 2 ? enemy.pulse : Math.sin(elapsed * 1.05 + enemy.pulse) * 0.1);
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "miter";
+  ctx.shadowColor = "rgba(255,255,255,0.48)";
+  ctx.shadowBlur = attackGlow ? 16 : 8;
+  ctx.strokeStyle = `rgba(255,255,255,${0.72 + hp * 0.24})`;
+  ctx.lineWidth = 2.45;
+
+  [-0.48, 0.48].forEach((x) => {
+    ctx.beginPath();
+    ctx.moveTo(x * r - r * 0.2 + tremor, -r * 1.42);
+    ctx.lineTo(x * r + r * 0.2 - tremor * 0.35, r * 1.42);
+    ctx.stroke();
+  });
+  [-0.38, 0.38].forEach((y) => {
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.18, y * r + r * 0.18 + tremor * 0.25);
+    ctx.lineTo(r * 1.18, y * r - r * 0.18 - tremor);
+    ctx.stroke();
+  });
+
+  const activeTip = Math.floor((elapsed * 8 + enemy.id) % tips.length);
+  tips.forEach((tip, index) => {
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(255,255,255,${attackGlow && index === activeTip ? 0.92 : 0.42})`;
+    ctx.arc(tip.x, tip.y, attackGlow && index === activeTip ? 3 : 1.7, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.strokeStyle = `rgba(255,255,255,${attackGlow ? 0.32 : 0.13})`;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i += 1) {
+    const offset = -r * 1.28 + i * r * 0.64;
+    ctx.beginPath();
+    ctx.moveTo(offset, -r * 1.55 + Math.sin(elapsed * 17 + i) * 2);
+    ctx.lineTo(offset + r * 0.34, -r * 1.18 + Math.cos(elapsed * 13 + i) * 1.5);
+    ctx.stroke();
+  }
+
+  if (attackGlow) {
+    ctx.strokeStyle = "rgba(255,255,255,0.42)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.72, Math.sin(elapsed * 18) * 2.5);
+    ctx.lineTo(r * 1.72, Math.cos(elapsed * 18) * 2.5);
+    ctx.stroke();
+  }
+  drawNoiseDust(ctx, r * 1.7, elapsed, enemy.id + 51, 7, attackGlow ? 0.32 : 0.18);
+  ctx.restore();
+}
+
+function drawResidualEchoEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, elapsed: number) {
+  ctx.save();
+  ctx.shadowColor = "rgba(255,255,255,0.32)";
+  ctx.shadowBlur = 7;
+  ctx.beginPath();
+  for (let i = 0; i < 5; i += 1) {
+    const angle = (Math.PI * 2 * i) / 5 + elapsed;
+    const r = i % 2 ? enemy.radius * 0.5 : enemy.radius;
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawMiniWavePath(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  amp: number,
+  elapsed: number,
+  seed: number,
+) {
+  ctx.beginPath();
+  for (let i = 0; i <= 34; i += 1) {
+    const t = i / 34;
+    const x = -width / 2 + t * width;
+    const y =
+      Math.sin(t * Math.PI * 4 + elapsed * 2.4 + seed) * amp * Math.sin(t * Math.PI) +
+      Math.sin(t * Math.PI * 15 + elapsed * 5) * amp * 0.11;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+}
+
+function drawNoiseDust(
+  ctx: CanvasRenderingContext2D,
+  radius: number,
+  elapsed: number,
+  seed: number,
+  count: number,
+  alpha: number,
+  colorPrefix = "rgba(255,255,255,",
+) {
+  ctx.save();
+  ctx.shadowBlur = 0;
+  for (let i = 0; i < count; i += 1) {
+    const angle = seed * 0.71 + i * 2.399 + elapsed * (0.2 + i * 0.015);
+    const dist = radius * (0.52 + 0.5 * Math.abs(Math.sin(seed + i * 1.7)));
+    const size = 0.75 + (i % 3) * 0.35;
+    ctx.fillStyle = `${colorPrefix}${alpha * (0.45 + (i % 4) * 0.12)})`;
+    ctx.beginPath();
+    ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist * 0.72, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawBoss(
@@ -5534,6 +5733,23 @@ function drawWaveBoss(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
+  ctx.fillStyle = `rgba(255,255,255,${0.025 + enrage * 0.012 + telegraphProgress * 0.02})`;
+  ctx.strokeStyle = `rgba(255,255,255,${0.24 + enrage * 0.08 + telegraphProgress * 0.16})`;
+  ctx.lineWidth = 1.2;
+  drawWaveBossMembrane(ctx, width, amp * 1.08, elapsed, distortion, samples);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.08 + telegraphProgress * 0.08})`;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i += 1) {
+    const y = -amp * 1.24 + i * amp * 0.62 + Math.sin(elapsed * 0.7 + i) * (2 + enrage);
+    ctx.beginPath();
+    ctx.moveTo(-width * 0.58, y);
+    ctx.lineTo(width * 0.58, y + Math.sin(elapsed * 0.8 + i) * (4 + enrage * 2));
+    ctx.stroke();
+  }
+
   ctx.shadowColor = "rgba(255,255,255,0.62)";
   ctx.shadowBlur = 22 + enrage * 10 + telegraphProgress * 18;
   ctx.strokeStyle = `rgba(255,255,255,${0.18 + telegraphProgress * 0.12})`;
@@ -5599,6 +5815,38 @@ function drawSmoothWavePath(
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
+}
+
+function drawWaveBossMembrane(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  amp: number,
+  elapsed: number,
+  distortion: number,
+  samples: number,
+) {
+  ctx.beginPath();
+  for (let i = 0; i <= samples; i += 1) {
+    const t = i / samples;
+    const x = -width / 2 + t * width;
+    const envelope = Math.sin(t * Math.PI);
+    const center =
+      Math.sin(t * Math.PI * 3.2 + elapsed * 1.18) * amp * envelope +
+      Math.sin(t * Math.PI * 13 + elapsed * 3.4) * amp * 0.05 * distortion;
+    const y = center - amp * 0.34 * envelope;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  for (let i = samples; i >= 0; i -= 1) {
+    const t = i / samples;
+    const x = -width / 2 + t * width;
+    const envelope = Math.sin(t * Math.PI);
+    const center =
+      Math.sin(t * Math.PI * 3.2 + elapsed * 1.18) * amp * envelope +
+      Math.sin(t * Math.PI * 9 + elapsed * 2.6) * amp * 0.04 * distortion;
+    ctx.lineTo(x, center + amp * 0.34 * envelope);
+  }
+  ctx.closePath();
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, state: GameState) {
