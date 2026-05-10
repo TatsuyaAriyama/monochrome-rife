@@ -2372,8 +2372,8 @@ function GameScreen({
     state.spawnClock -= dt;
     const stage = STAGES[state.stageIndex];
     const difficulty = stage.enemyLevel + (state.runLoop - 1) * 0.7;
-    const spawnLimit = Math.round(5 + difficulty * 3);
-    const spawnDelay = clamp(0.95 - difficulty * 0.13, 0.34, 0.95);
+    const spawnLimit = Math.min(8, Math.round(4 + difficulty * 1.25));
+    const spawnDelay = clamp(1.28 - difficulty * 0.08, 0.72, 1.28);
 
     if (state.spawnClock <= 0 && state.enemies.length < spawnLimit) {
       spawnEnemy(state);
@@ -3335,6 +3335,36 @@ function GameScreen({
       enemy.x += (toPlayer.x * forward + side.x * Math.sin(enemy.pulse) * drift) * dt;
       enemy.y += (toPlayer.y * forward + side.y * Math.cos(enemy.pulse) * drift) * dt;
     });
+    separateEnemies(state);
+  }
+
+  function separateEnemies(state: GameState) {
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (let i = 0; i < state.enemies.length; i += 1) {
+        const a = state.enemies[i];
+        if (a.kind === 8) continue;
+        for (let j = i + 1; j < state.enemies.length; j += 1) {
+          const b = state.enemies[j];
+          if (b.kind === 8) continue;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.hypot(dx, dy) || 0.001;
+          const minDist = a.radius + b.radius + 10;
+          if (dist >= minDist) continue;
+          const push = (minDist - dist) * 0.5;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          a.x -= nx * push;
+          a.y -= ny * push;
+          b.x += nx * push;
+          b.y += ny * push;
+        }
+      }
+    }
+    for (const enemy of state.enemies) {
+      enemy.x = clamp(enemy.x, enemy.radius + 18, state.width - enemy.radius - 18);
+      enemy.y = clamp(enemy.y, 72 + enemy.radius, state.height - enemy.radius - 18);
+    }
   }
 
   function addVinylDistortion(state: GameState, enemy: Enemy) {
