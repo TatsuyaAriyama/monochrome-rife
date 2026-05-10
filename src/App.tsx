@@ -91,6 +91,7 @@ type Enemy = Vec & {
   attackClock: number;
   mode: number;
   telegraph: boolean;
+  facing: number;
 };
 
 type Hazard = Vec & {
@@ -105,6 +106,17 @@ type Hazard = Vec & {
   length?: number;
   width?: number;
   angularVelocity?: number;
+};
+
+type Obstacle = Vec & {
+  id: number;
+  width: number;
+  height: number;
+  hp: number;
+  maxHp: number;
+  kind: number;
+  destructible: boolean;
+  pulse: number;
 };
 
 type Particle = Vec & {
@@ -175,6 +187,7 @@ type GameState = {
   bullets: Bullet[];
   enemies: Enemy[];
   hazards: Hazard[];
+  obstacles: Obstacle[];
   particles: Particle[];
   boss: Boss | null;
   stageIndex: number;
@@ -186,6 +199,8 @@ type GameState = {
   score: number;
   nextRestScore: number;
   spawnClock: number;
+  obstacleClock: number;
+  scroll: number;
   fireClock: number;
   pulseClock: number;
   auraClock: number;
@@ -2039,7 +2054,7 @@ function GameScreen({
         mouse: { x: rect.width / 2, y: rect.height / 2 - 80 },
         player: {
           x: rect.width / 2,
-          y: rect.height / 2,
+          y: rect.height * 0.72,
           radius: 14,
           hp: maxHp,
           maxHp,
@@ -2053,6 +2068,7 @@ function GameScreen({
         bullets: [],
         enemies: [],
         hazards: [],
+        obstacles: [],
         particles: [],
         boss: null,
         stageIndex: initialStageIndex,
@@ -2064,6 +2080,8 @@ function GameScreen({
         score: 0,
         nextRestScore: 1000,
         spawnClock: 0,
+        obstacleClock: 0.4,
+        scroll: 0,
         fireClock: 0,
         pulseClock: 7,
         auraClock: 0,
@@ -2277,6 +2295,7 @@ function GameScreen({
     currentSettings: Settings,
     dt: number,
   ) {
+    updateForwardScroll(state, dt);
     updatePlayer(state, dt);
     updateStage(state, dt);
     if (state.phase !== "warning") updateShooting(state, stats, dt);
@@ -2284,6 +2303,11 @@ function GameScreen({
     updateEntities(state, stats, currentSettings, dt);
     state.bannerClock = Math.max(0, state.bannerClock - dt);
     state.shake = Math.max(0, state.shake - dt * 16);
+  }
+
+  function updateForwardScroll(state: GameState, dt: number) {
+    const speed = state.phase === "boss" ? 18 : state.phase === "warning" ? 30 : 46;
+    state.scroll += speed * dt;
   }
 
   function updatePlayer(state: GameState, dt: number) {
@@ -2382,8 +2406,8 @@ function GameScreen({
     state.spawnClock -= dt;
     const stage = STAGES[state.stageIndex];
     const difficulty = stage.enemyLevel + (state.runLoop - 1) * 0.7;
-    const spawnLimit = Math.min(8, Math.round(4 + difficulty * 1.25));
-    const spawnDelay = clamp(1.28 - difficulty * 0.08, 0.72, 1.28);
+    const spawnLimit = Math.min(5, Math.round(3 + difficulty * 0.65));
+    const spawnDelay = clamp(1.65 - difficulty * 0.08, 0.95, 1.65);
 
     if (state.spawnClock <= 0 && state.enemies.length < spawnLimit) {
       spawnEnemy(state);
@@ -2396,6 +2420,7 @@ function GameScreen({
     state.phaseTimer = STAGE_DURATIONS.warning;
     state.enemies = [];
     state.hazards = [];
+    state.obstacles = [];
     state.bullets = [];
     state.spawnClock = 0;
     state.bannerText = "WARNING";
@@ -2414,9 +2439,11 @@ function GameScreen({
     state.waveKills = 0;
     state.enemies = [];
     state.hazards = [];
+    state.obstacles = [];
     state.bullets = [];
     state.boss = null;
     state.spawnClock = 0;
+    state.obstacleClock = 0.5;
     state.fireClock = 0;
     state.freezeClock = 0;
     state.freezeCooldown = state.stageIndex === 2 ? 8 : 11;
@@ -2491,20 +2518,14 @@ function GameScreen({
   }
 
   function spawnEnemy(state: GameState) {
-    const edge = Math.floor(Math.random() * 4);
-    const margin = 34;
+    const margin = 56;
+    const laneCount = 5;
+    const lane = Math.floor(Math.random() * laneCount);
     const x =
-      edge === 0
-        ? -margin
-        : edge === 1
-          ? state.width + margin
-          : Math.random() * state.width;
-    const y =
-      edge === 2
-        ? -margin
-        : edge === 3
-          ? state.height + margin
-          : 70 + Math.random() * (state.height - 90);
+      margin +
+      ((state.width - margin * 2) * (lane + 0.5)) / laneCount +
+      (Math.random() - 0.5) * 42;
+    const y = -margin - Math.random() * 80;
     const stage = STAGES[state.stageIndex];
     const kindPool =
       state.stageIndex === 3
@@ -2528,10 +2549,19 @@ function GameScreen({
       damage: 9 + Math.min(kind, 4) * 2 + state.stageIndex,
       kind,
       pulse: Math.random() * Math.PI * 2,
-      attackClock: kind === 1 ? 1.4 + Math.random() * 1.2 : kind === 3 ? 1.1 : kind === 6 ? 1.35 + Math.random() * 0.75 : 0,
+      attackClock: enemyAttackInterval(kind, state.stageIndex) * (0.55 + Math.random() * 0.45),
       mode: 0,
       telegraph: false,
+      facing: Math.PI / 2,
     });
+  }
+
+  function enemyAttackInterval(kind: number, stageIndex: number) {
+    if (kind === 0) return 2.25 - stageIndex * 0.08;
+    if (kind === 1) return 2.45 - stageIndex * 0.1;
+    if (kind === 3) return 2.85 - stageIndex * 0.08;
+    if (kind === 6) return 2.35;
+    return 2.6;
   }
 
   function spawnRestCharacter(state: GameState) {
@@ -2553,6 +2583,7 @@ function GameScreen({
       attackClock: 0,
       mode: 0,
       telegraph: false,
+      facing: Math.PI / 2,
     });
     addRipple(state, x, y, 120, "rest");
     audioRef.current.loot(false);
@@ -2592,6 +2623,7 @@ function GameScreen({
     state.bossElapsed = 0;
     state.enemies = [];
     state.hazards = [];
+    state.obstacles = [];
     state.bullets = [];
     state.freezeClock = 0;
     state.freezeCooldown = state.stageIndex === 2 ? 7 : 99;
@@ -3167,7 +3199,10 @@ function GameScreen({
         hazard.life -= dt;
       });
 
+      updateObstacles(state, dt);
       updateEnemies(state, dt);
+      handleObstacleHits(state);
+      resolvePlayerObstacleCollision(state);
       handleBulletHits(state, stats);
       handlePlayerDamage(state);
       updateSpecials(state, stats, currentSettings, dt);
@@ -3182,6 +3217,7 @@ function GameScreen({
         bullet.y < state.height + 80,
     );
     state.hazards = state.hazards.filter((hazard) => hazard.life > 0);
+    state.obstacles = state.obstacles.filter((obstacle) => obstacle.hp > 0 && obstacle.y < state.height + obstacle.height + 90);
     state.particles.forEach((particle) => {
       particle.x += particle.vx * dt;
       particle.y += particle.vy * dt;
@@ -3190,11 +3226,100 @@ function GameScreen({
     state.particles = state.particles.filter((particle) => particle.life > 0);
   }
 
+  function updateObstacles(state: GameState, dt: number) {
+    if (state.phase === "combat") {
+      state.obstacleClock -= dt;
+      const activeCover = state.obstacles.filter((obstacle) => obstacle.y > -80 && obstacle.y < state.height - 80).length;
+      if (state.obstacleClock <= 0 && activeCover < 3) {
+        spawnObstacle(state);
+        state.obstacleClock = 4.2 + Math.random() * 2.4;
+      }
+    }
+
+    const drift = state.phase === "boss" ? 16 : 42;
+    for (const obstacle of state.obstacles) {
+      obstacle.y += drift * dt;
+      obstacle.pulse += dt;
+    }
+  }
+
+  function spawnObstacle(state: GameState) {
+    const kind = Math.floor(Math.random() * 5);
+    const width = kind === 0 ? 76 : kind === 1 ? 116 : kind === 2 ? 64 : kind === 3 ? 52 : 96;
+    const height = kind === 0 ? 76 : kind === 1 ? 42 : kind === 2 ? 104 : kind === 3 ? 132 : 34;
+    const x = 70 + Math.random() * Math.max(1, state.width - 140);
+    const destructible = kind !== 4;
+    const hp = destructible ? 72 + state.stageIndex * 14 + state.runLoop * 8 : 9999;
+    state.obstacles.push({
+      id: state.nextId++,
+      x,
+      y: -height - Math.random() * 80,
+      width,
+      height,
+      hp,
+      maxHp: hp,
+      kind,
+      destructible,
+      pulse: Math.random() * Math.PI * 2,
+    });
+  }
+
+  function handleObstacleHits(state: GameState) {
+    const deadBullets = new Set<number>();
+    for (const bullet of state.bullets) {
+      for (const obstacle of state.obstacles) {
+        if (!circleHitsObstacle(bullet.x, bullet.y, bullet.radius, obstacle)) continue;
+        if (obstacle.destructible) obstacle.hp -= bullet.damage * 0.7;
+        addRipple(state, bullet.x, bullet.y, 26, obstacle.destructible ? "spark" : "afterimage");
+        deadBullets.add(bullet.id);
+        break;
+      }
+    }
+    state.bullets = state.bullets.filter((bullet) => !deadBullets.has(bullet.id));
+
+    for (const hazard of state.hazards) {
+      if (hazard.kind === "laser" || hazard.kind === "shockwave" || hazard.kind === "noiseZone") continue;
+      for (const obstacle of state.obstacles) {
+        if (!circleHitsObstacle(hazard.x, hazard.y, hazard.radius, obstacle)) continue;
+        if (obstacle.destructible) obstacle.hp -= hazard.damage * 5.5;
+        addRipple(state, hazard.x, hazard.y, 38, "wave");
+        hazard.life = 0;
+        break;
+      }
+    }
+  }
+
+  function resolvePlayerObstacleCollision(state: GameState) {
+    for (const obstacle of state.obstacles) {
+      const nearestX = clamp(state.player.x, obstacle.x - obstacle.width / 2, obstacle.x + obstacle.width / 2);
+      const nearestY = clamp(state.player.y, obstacle.y - obstacle.height / 2, obstacle.y + obstacle.height / 2);
+      const dx = state.player.x - nearestX;
+      const dy = state.player.y - nearestY;
+      const dist = Math.hypot(dx, dy);
+      if (dist >= state.player.radius || obstacle.y < -obstacle.height) continue;
+      const nx = dist > 0.001 ? dx / dist : 0;
+      const ny = dist > 0.001 ? dy / dist : 1;
+      const push = state.player.radius - dist + 0.5;
+      state.player.x += nx * push;
+      state.player.y += ny * push;
+    }
+    state.player.x = clamp(state.player.x, 24, state.width - 24);
+    state.player.y = clamp(state.player.y, 72, state.height - 24);
+  }
+
+  function circleHitsObstacle(x: number, y: number, radius: number, obstacle: Obstacle) {
+    const nearestX = clamp(x, obstacle.x - obstacle.width / 2, obstacle.x + obstacle.width / 2);
+    const nearestY = clamp(y, obstacle.y - obstacle.height / 2, obstacle.y + obstacle.height / 2);
+    return Math.hypot(x - nearestX, y - nearestY) <= radius;
+  }
+
   function updateEnemies(state: GameState, dt: number) {
     state.enemies.forEach((enemy) => {
-      enemy.pulse += dt * 5;
+      enemy.pulse += dt * (enemy.kind === 3 ? 3.4 : 2.6);
       const toPlayer = normalize(state.player.x - enemy.x, state.player.y - enemy.y);
       const side = rotate(toPlayer, Math.PI / 2);
+      const targetFacing = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
+      enemy.facing += angleDelta(targetFacing, enemy.facing) * dt * 4.2;
 
       if (enemy.kind === 8) {
         const dist = distance(enemy, state.player);
@@ -3221,131 +3346,58 @@ function GameScreen({
         return;
       }
 
-      if (enemy.kind === 1) {
-        const closeEnough = distance(enemy, state.player) < 260;
-        enemy.attackClock -= dt;
-        if (closeEnough && enemy.attackClock <= 0.62 && !enemy.telegraph) {
-          enemy.telegraph = true;
-          addRipple(state, enemy.x, enemy.y, 52, "spark");
-        }
-        if (closeEnough && enemy.attackClock <= 0) {
-          fireDistortedNote(state, enemy);
-          enemy.attackClock = 2.45 - state.stageIndex * 0.18;
-          enemy.telegraph = false;
-        }
-        const holding = closeEnough && enemy.attackClock < 0.62;
-        const forward = holding ? 0 : enemy.speed * 0.7;
-        const drift = holding ? 8 : 42;
-        enemy.x += (toPlayer.x * forward + side.x * Math.sin(enemy.pulse) * drift) * dt;
-        enemy.y += (toPlayer.y * forward + side.y * Math.cos(enemy.pulse) * drift) * dt;
-        return;
+      const dist = distance(enemy, state.player);
+      const laneOffset = ((enemy.id % 5) - 2) * 34;
+      const targetY = 118 + (enemy.id % 4) * 48 + state.stageIndex * 6;
+      const targetX =
+        state.width / 2 +
+        laneOffset +
+        Math.sin(enemy.pulse * (enemy.kind === 0 ? 0.72 : 0.54) + enemy.id) * (58 + enemy.kind * 3);
+      const entrySpeed = enemy.y < targetY ? enemy.speed * 0.48 : 0;
+      const tooClosePush = dist < 220 ? (220 - dist) * 0.55 : 0;
+      const holding = enemy.telegraph ? 0.28 : 1;
+      enemy.x += ((targetX - enemy.x) * 0.72 * holding - toPlayer.x * tooClosePush + side.x * Math.sin(enemy.pulse) * 16) * dt;
+      enemy.y += ((targetY - enemy.y) * 0.82 * holding + entrySpeed - toPlayer.y * tooClosePush * 0.55) * dt;
+
+      enemy.attackClock -= dt;
+      if (enemy.attackClock <= 0.58 && !enemy.telegraph) {
+        enemy.telegraph = true;
+        enemy.mode = 1;
+        addRipple(state, enemy.x, enemy.y, enemy.kind === 3 ? 80 : 56, "spark");
+      }
+      if (enemy.telegraph && enemy.kind === 3) addVinylDistortion(state, enemy);
+      if (enemy.telegraph && enemy.kind === 6) addSharpAfterimage(state, enemy);
+      if (enemy.attackClock <= 0) {
+        fireEnemyRangedPattern(state, enemy);
+        enemy.attackClock = enemyAttackInterval(enemy.kind, state.stageIndex) + Math.random() * 0.55;
+        enemy.telegraph = false;
+        enemy.mode = 0;
       }
 
-      if (enemy.kind === 3) {
-        const dist = distance(enemy, state.player);
-        if (enemy.mode === 0 && dist < 170) {
-          enemy.mode = 1;
-          enemy.attackClock = 0.5;
-          enemy.telegraph = true;
-          addRipple(state, enemy.x, enemy.y, 76, "spark");
-        }
-        if (enemy.mode === 1) {
-          enemy.attackClock -= dt;
-          if (enemy.attackClock > 0.24) addVinylDistortion(state, enemy);
-          if (enemy.attackClock <= 0) {
-            enemy.mode = 2;
-            enemy.attackClock = 0.38;
-            enemy.telegraph = false;
-            addRipple(state, enemy.x, enemy.y, 96, "wave");
-          }
-          return;
-        }
-        if (enemy.mode === 2) {
-          enemy.attackClock -= dt;
-          enemy.x += toPlayer.x * enemy.speed * 3.25 * dt;
-          enemy.y += toPlayer.y * enemy.speed * 3.25 * dt;
-          addVinylDistortion(state, enemy);
-          if (enemy.attackClock <= 0) {
-            enemy.mode = 3;
-            enemy.attackClock = 0.48;
-          }
-          return;
-        }
-        if (enemy.mode === 3) {
-          enemy.attackClock -= dt;
-          enemy.x += side.x * Math.sin(enemy.pulse) * 18 * dt;
-          enemy.y += side.y * Math.cos(enemy.pulse) * 18 * dt;
-          if (enemy.attackClock <= 0) enemy.mode = 0;
-          return;
-        }
-      }
-
-      if (enemy.kind === 6) {
-        const dist = distance(enemy, state.player);
-        enemy.attackClock -= dt;
-        if (enemy.mode === 2) {
-          enemy.attackClock -= dt;
-          enemy.x += Math.cos(enemy.pulse) * enemy.speed * 2.45 * dt;
-          enemy.y += Math.sin(enemy.pulse) * enemy.speed * 2.45 * dt;
-          addSharpAfterimage(state, enemy);
-          if (enemy.attackClock <= 0) {
-            enemy.mode = 3;
-            enemy.attackClock = 0.42;
-          }
-          return;
-        }
-        if (enemy.mode === 3) {
-          enemy.attackClock -= dt;
-          enemy.x += side.x * Math.sin(enemy.pulse * 2) * 22 * dt;
-          enemy.y += side.y * Math.cos(enemy.pulse * 2) * 22 * dt;
-          if (enemy.attackClock <= 0) {
-            enemy.mode = 0;
-            enemy.attackClock = 1.45 + Math.random() * 0.65;
-          }
-          return;
-        }
-        if ((enemy.attackClock <= 0.42 || dist < 145) && enemy.mode === 0) {
-          enemy.mode = 1;
-          enemy.attackClock = 0.34;
-          enemy.telegraph = true;
-          enemy.pulse = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
-          addRipple(state, enemy.x, enemy.y, 64, "spark");
-        }
-        if (enemy.mode === 1) {
-          enemy.attackClock -= dt;
-          enemy.x += side.x * Math.sin(enemy.pulse * 6) * 14 * dt;
-          enemy.y += side.y * Math.cos(enemy.pulse * 6) * 14 * dt;
-          addSharpAfterimage(state, enemy);
-          if (enemy.attackClock <= 0) {
-            fireSharpCut(state, enemy);
-            enemy.mode = 2;
-            enemy.attackClock = 0.28;
-          }
-          return;
-        }
-        if (enemy.attackClock <= 0) {
-          enemy.mode = 1;
-          enemy.attackClock = 0.34;
-          enemy.telegraph = false;
-          enemy.pulse = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
-        }
-
-        const cutAngle = Math.atan2(toPlayer.y, toPlayer.x);
-        const slash = { x: Math.cos(cutAngle + Math.sin(enemy.pulse) * 0.55), y: Math.sin(cutAngle + Math.sin(enemy.pulse) * 0.55) };
-        enemy.x += (toPlayer.x * enemy.speed * 0.28 + slash.x * enemy.speed * 0.24 + side.x * Math.sin(enemy.pulse * 3.2) * 28) * dt;
-        enemy.y += (toPlayer.y * enemy.speed * 0.28 + slash.y * enemy.speed * 0.24 + side.y * Math.cos(enemy.pulse * 3.4) * 28) * dt;
-        if (Math.random() < 0.32) addSharpAfterimage(state, enemy);
-        enemy.x = clamp(enemy.x, 34, state.width - 34);
-        enemy.y = clamp(enemy.y, 82, state.height - 34);
-        return;
-      }
-
-      const forward = enemy.speed * 0.58;
-      const drift = 46;
-      enemy.x += (toPlayer.x * forward + side.x * Math.sin(enemy.pulse) * drift) * dt;
-      enemy.y += (toPlayer.y * forward + side.y * Math.cos(enemy.pulse) * drift) * dt;
+      enemy.x = clamp(enemy.x, 34, state.width - 34);
+      enemy.y = clamp(enemy.y, 78, state.height * 0.58);
     });
     separateEnemies(state);
+  }
+
+  function fireEnemyRangedPattern(state: GameState, enemy: Enemy) {
+    if (enemy.kind === 0) {
+      fireWaveformEnemy(state, enemy);
+      return;
+    }
+    if (enemy.kind === 1) {
+      fireDistortedNote(state, enemy);
+      return;
+    }
+    if (enemy.kind === 3) {
+      fireVinylShot(state, enemy);
+      return;
+    }
+    if (enemy.kind === 6) {
+      fireSharpCut(state, enemy);
+      return;
+    }
+    fireWaveformEnemy(state, enemy);
   }
 
   function separateEnemies(state: GameState) {
@@ -3446,6 +3498,37 @@ function GameScreen({
     audioRef.current.wavePulse();
   }
 
+  function fireWaveformEnemy(state: GameState, enemy: Enemy) {
+    const aim = normalize(state.player.x - enemy.x, state.player.y - enemy.y);
+    const count = state.stageIndex > 1 ? 2 : 1;
+    for (let i = 0; i < count; i += 1) {
+      const offset = count === 1 ? 0 : i === 0 ? -0.13 : 0.13;
+      const dir = rotate(aim, offset);
+      spawnWaveHazard(state, enemy.x, enemy.y, Math.atan2(dir.y, dir.x), 112 + state.stageIndex * 8, 8.5, 7 + state.stageIndex);
+    }
+    addRipple(state, enemy.x, enemy.y, 66, "wave");
+  }
+
+  function fireVinylShot(state: GameState, enemy: Enemy) {
+    const aim = normalize(state.player.x - enemy.x, state.player.y - enemy.y);
+    [-0.18, 0.18].forEach((offset) => {
+      const dir = rotate(aim, offset);
+      state.hazards.push({
+        id: state.nextId++,
+        x: enemy.x + dir.x * enemy.radius,
+        y: enemy.y + dir.y * enemy.radius,
+        vx: dir.x * (124 + state.stageIndex * 10),
+        vy: dir.y * (124 + state.stageIndex * 10),
+        radius: 7.5,
+        damage: 9 + state.stageIndex,
+        life: 5.4,
+        kind: "orb",
+      });
+    });
+    addRipple(state, enemy.x, enemy.y, 88, "wave");
+    audioRef.current.wavePulse();
+  }
+
   function fireSharpCut(state: GameState, enemy: Enemy) {
     const enemyId = enemy.id;
     getSharpTipOffsets(enemy.radius).forEach((tip, index) => {
@@ -3454,7 +3537,7 @@ function GameScreen({
         if (!live || live.gameOver || live.phase !== "combat") return;
         const source = live.enemies.find((target) => target.id === enemyId);
         if (!source || source.hp <= 0) return;
-        const offset = rotate(tip, source.pulse);
+        const offset = rotate(tip, source.facing - Math.PI / 2);
         const x = source.x + offset.x;
         const y = source.y + offset.y;
         const aim = normalize(live.player.x - x, live.player.y - y);
@@ -3603,6 +3686,7 @@ function GameScreen({
     }
 
     for (const hazard of state.hazards) {
+      if (hazard.life <= 0) continue;
       if (hazard.kind === "noiseZone") continue;
       const hit =
         hazard.kind === "laser"
@@ -3667,6 +3751,7 @@ function GameScreen({
     state.boss = null;
     state.enemies = [];
     state.hazards = [];
+    state.obstacles = [];
     state.bullets = [];
     state.bannerText =
       state.stageIndex === 3
@@ -3868,6 +3953,7 @@ function drawGame(
   ctx.clearRect(0, 0, state.width, state.height);
   ctx.translate(shakeX, shakeY);
   drawBackground(ctx, state, settings, elapsed);
+  drawObstacles(ctx, state, elapsed);
   drawParticles(ctx, state);
   drawAim(ctx, state, settings);
   if (state.boss) drawBossTelegraph(ctx, state, state.boss);
@@ -3894,7 +3980,8 @@ function drawBackground(
 
   ctx.strokeStyle = `rgba(255,255,255,${0.08 * (1 - silence * 0.7)})`;
   ctx.lineWidth = 1;
-  for (let y = 96; y < state.height; y += 54) {
+  const staffOffset = state.scroll % 54;
+  for (let y = 96 + staffOffset - 54; y < state.height + 54; y += 54) {
     const collapse =
       state.stageIndex === 2
         ? Math.sin(elapsed * 1.7 + y * 0.02) * silence * 42
@@ -3940,6 +4027,142 @@ function drawBackground(
       if (x === 0 || missing) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.035 * (1 - silence * 0.5)})`;
+  for (let i = 0; i < 8; i += 1) {
+    const x = ((i * 137 + state.scroll * 0.42) % (state.width + 180)) - 90;
+    ctx.beginPath();
+    ctx.moveTo(x, -20);
+    ctx.lineTo(x + Math.sin(elapsed + i) * 22, state.height + 40);
+    ctx.stroke();
+  }
+}
+
+function drawObstacles(ctx: CanvasRenderingContext2D, state: GameState, elapsed: number) {
+  for (const obstacle of state.obstacles) {
+    const damage = obstacle.destructible ? 1 - clamp(obstacle.hp / obstacle.maxHp, 0, 1) : 0;
+    ctx.save();
+    ctx.translate(obstacle.x, obstacle.y);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = "rgba(255,255,255,0.3)";
+    ctx.shadowBlur = obstacle.destructible ? 7 + damage * 10 : 12;
+    ctx.strokeStyle = `rgba(255,255,255,${obstacle.destructible ? 0.34 + damage * 0.18 : 0.5})`;
+    ctx.fillStyle = `rgba(255,255,255,${obstacle.destructible ? 0.025 : 0.045})`;
+    ctx.lineWidth = obstacle.destructible ? 1.5 : 1.8;
+
+    if (obstacle.kind === 0) {
+      drawSpeakerWreck(ctx, obstacle, elapsed, damage);
+    } else if (obstacle.kind === 1) {
+      drawScorePlate(ctx, obstacle, elapsed, damage);
+    } else if (obstacle.kind === 2) {
+      drawRecordWall(ctx, obstacle, elapsed, damage);
+    } else if (obstacle.kind === 3) {
+      drawNoisePillar(ctx, obstacle, elapsed, damage);
+    } else {
+      drawSoundBarrier(ctx, obstacle, elapsed);
+    }
+    ctx.restore();
+  }
+}
+
+function drawSpeakerWreck(ctx: CanvasRenderingContext2D, obstacle: Obstacle, elapsed: number, damage: number) {
+  const w = obstacle.width;
+  const h = obstacle.height;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.48, -h * 0.38);
+  ctx.lineTo(w * 0.42, -h * 0.46 + damage * 5);
+  ctx.lineTo(w * 0.5, h * 0.36);
+  ctx.lineTo(-w * 0.4, h * 0.46);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  for (let ring = 0.22; ring <= 0.44; ring += 0.11) {
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.min(w, h) * ring + Math.sin(elapsed * 3 + ring) * 1.2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.34, h * 0.28);
+  ctx.lineTo(w * 0.2, -h * 0.18);
+  ctx.lineTo(w * 0.42, -h * 0.02);
+  ctx.stroke();
+}
+
+function drawScorePlate(ctx: CanvasRenderingContext2D, obstacle: Obstacle, elapsed: number, damage: number) {
+  const w = obstacle.width;
+  const h = obstacle.height;
+  ctx.strokeRect(-w / 2, -h / 2, w, h);
+  for (let i = 0; i < 5; i += 1) {
+    const y = -h * 0.28 + i * h * 0.14;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.42, y);
+    ctx.lineTo(w * 0.42, y + Math.sin(elapsed * 2 + i) * (1 + damage * 3));
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.ellipse(-w * 0.16, h * 0.18, 7, 4, -0.4, 0, Math.PI * 2);
+  ctx.moveTo(w * 0.08, h * 0.1);
+  ctx.lineTo(w * 0.08, -h * 0.26);
+  ctx.stroke();
+}
+
+function drawRecordWall(ctx: CanvasRenderingContext2D, obstacle: Obstacle, elapsed: number, damage: number) {
+  const r = Math.min(obstacle.width, obstacle.height) * 0.46;
+  ctx.rotate(Math.sin(elapsed * 0.8 + obstacle.pulse) * 0.08);
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0.2, Math.PI * 1.62);
+  ctx.lineTo(r * 0.14, r * 0.08);
+  ctx.arc(0, 0, r * 0.62, Math.PI * 1.52, Math.PI * 1.88, true);
+  ctx.arc(0, 0, r, Math.PI * 1.9, Math.PI * 2.05);
+  ctx.fill();
+  ctx.stroke();
+  for (let groove = 0.34; groove <= 0.82; groove += 0.16) {
+    ctx.beginPath();
+    ctx.arc(0, 0, r * groove + damage * 2, 0.2, Math.PI * 1.5);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.12, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawNoisePillar(ctx: CanvasRenderingContext2D, obstacle: Obstacle, elapsed: number, damage: number) {
+  const w = obstacle.width;
+  const h = obstacle.height;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.35, -h * 0.5);
+  ctx.lineTo(w * 0.34, -h * 0.46);
+  ctx.lineTo(w * 0.42, h * 0.5);
+  ctx.lineTo(-w * 0.42, h * 0.44);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(255,255,255,${0.12 + damage * 0.18})`;
+  for (let i = 0; i < 7; i += 1) {
+    const y = -h * 0.42 + ((elapsed * 24 + i * 19) % (h * 0.84));
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.3, y);
+    ctx.lineTo(w * 0.32, y + Math.sin(elapsed * 7 + i) * 5);
+    ctx.stroke();
+  }
+}
+
+function drawSoundBarrier(ctx: CanvasRenderingContext2D, obstacle: Obstacle, elapsed: number) {
+  const w = obstacle.width;
+  const h = obstacle.height;
+  ctx.strokeStyle = "rgba(255,255,255,0.46)";
+  ctx.fillStyle = "rgba(255,255,255,0.025)";
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, -h / 2, w, h, 12);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  for (let i = 0; i < 3; i += 1) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * (0.28 + i * 0.15), h * (0.28 + i * 0.08), Math.sin(elapsed + i) * 0.04, 0, Math.PI * 2);
     ctx.stroke();
   }
 }
@@ -4733,8 +4956,37 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState, elapsed: n
     else if (enemy.kind === 6) drawSharpEnemy(ctx, enemy, hp, elapsed);
     else drawResidualEchoEnemy(ctx, enemy, elapsed);
 
+    if (enemy.kind !== 8) drawEnemyFacingCue(ctx, enemy, elapsed, baseRotation);
     ctx.restore();
   }
+}
+
+function drawEnemyFacingCue(
+  ctx: CanvasRenderingContext2D,
+  enemy: Enemy,
+  elapsed: number,
+  baseRotation: number,
+) {
+  const r = enemy.radius * (enemy.kind === 3 ? 1.65 : enemy.kind === 6 ? 1.55 : 1.35);
+  const alpha = enemy.telegraph ? 0.58 : 0.22;
+  ctx.save();
+  ctx.rotate(enemy.facing - baseRotation);
+  ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+  ctx.fillStyle = `rgba(255,255,255,${alpha + 0.12})`;
+  ctx.lineWidth = enemy.telegraph ? 1.7 : 1;
+  ctx.shadowColor = "rgba(255,255,255,0.38)";
+  ctx.shadowBlur = enemy.telegraph ? 10 : 3;
+  ctx.beginPath();
+  ctx.moveTo(r * 0.72, 0);
+  ctx.lineTo(r * 1.16, -4);
+  ctx.lineTo(r * 1.16, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(r * 0.38, Math.sin(elapsed * 8 + enemy.id) * 1.5);
+  ctx.lineTo(r * 1.18, 0);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawRestEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, elapsed: number) {
@@ -5054,7 +5306,7 @@ function drawSharpEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, hp: number,
   const attackGlow = enemy.mode === 1 || enemy.mode === 2;
   const tips = getSharpTipOffsets(r);
   ctx.save();
-  ctx.rotate(enemy.mode === 2 ? enemy.pulse : Math.sin(elapsed * 1.05 + enemy.pulse) * 0.1);
+  ctx.rotate(enemy.facing - Math.PI / 2 + Math.sin(elapsed * 1.05 + enemy.pulse) * 0.08);
   ctx.lineCap = "butt";
   ctx.lineJoin = "miter";
   ctx.shadowColor = "rgba(255,255,255,0.48)";
