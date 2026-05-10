@@ -2505,7 +2505,7 @@ function GameScreen({
     const difficulty = stage.enemyLevel + (state.runLoop - 1) * 0.65;
     const baseHp = 22 + difficulty * 10 + Math.min(kind, 4) * 7;
     const hp = kind === 3 ? baseHp * 2.64 : kind === 6 ? baseHp * 1.15 : baseHp;
-    const speedBoost = kind === 3 ? 26 : kind === 4 ? 92 : kind === 5 ? 38 : kind === 6 ? 86 : 0;
+    const speedBoost = kind === 3 ? 26 : kind === 4 ? 92 : kind === 5 ? 38 : kind === 6 ? 38 : 0;
     state.enemies.push({
       id: state.nextId++,
       x,
@@ -2517,7 +2517,7 @@ function GameScreen({
       damage: 9 + Math.min(kind, 4) * 2 + state.stageIndex,
       kind,
       pulse: Math.random() * Math.PI * 2,
-      attackClock: kind === 1 ? 1.4 + Math.random() * 1.2 : kind === 3 ? 1.1 : kind === 6 ? 0.95 + Math.random() * 0.55 : 0,
+      attackClock: kind === 1 ? 1.4 + Math.random() * 1.2 : kind === 3 ? 1.1 : kind === 6 ? 1.35 + Math.random() * 0.75 : 0,
       mode: 0,
       telegraph: false,
     });
@@ -2867,12 +2867,11 @@ function GameScreen({
 
   function fireStageFourBoss(state: GameState, boss: Boss, enrage: number) {
     if (boss.pattern === 0) {
-      fireLostScoreRecordLines(state, boss, enrage, false);
+      fireLostScoreMelody(state, boss, enrage);
       return;
     }
     if (boss.pattern === 1) {
       spawnNoiseZone(state, boss.targetX, boss.targetY, 78 + enrage * 18, 3.6 + enrage * 0.6);
-      spawnScoreLine(state, boss.targetX, boss.targetY, boss.targetAngle + Math.PI / 2, 210, 7, 8, 1.25, 0);
       audioRef.current.wavePulse();
       return;
     }
@@ -2881,33 +2880,14 @@ function GameScreen({
       return;
     }
     if (boss.pattern === 3) {
-      fireLostScoreRecordLines(state, boss, enrage, true);
+      fireLostScoreMelody(state, boss, enrage);
       return;
     }
-    fireLostScoreRecordLines(state, boss, enrage, true);
     spawnNoiseZone(state, boss.targetX, boss.targetY, 92 + enrage * 20, 3.4 + enrage * 0.6);
     window.setTimeout(() => {
       const live = stateRef.current;
       if (live?.boss?.id === boss.id && !live.gameOver) fireLostScoreMelody(live, boss, enrage);
     }, 260);
-  }
-
-  function fireLostScoreRecordLines(state: GameState, boss: Boss, enrage: number, diagonal: boolean) {
-    const count = diagonal ? 6 + enrage : 5 + enrage;
-    const gap = boss.rhythmIndex % count;
-    for (let i = 0; i < count; i += 1) {
-      if (i === gap || (!diagonal && i === (gap + 1) % count)) continue;
-      const t = (i + 0.5) / count;
-      if (diagonal) {
-        const x = state.width * t;
-        const angle = Math.PI / 2 + (i % 2 === 0 ? 0.22 : -0.22);
-        spawnScoreLine(state, x, state.height * 0.48, angle, state.height * 1.25, 8, 10, 1.35, 20);
-      } else {
-        const y = 118 + (state.height - 172) * t;
-        spawnScoreLine(state, state.width / 2, y, Math.sin(boss.rhythmIndex) * 0.06, state.width * 1.08, 8, 9, 1.25, 22);
-      }
-    }
-    audioRef.current.wavePulse();
   }
 
   function fireLostScoreMelody(state: GameState, boss: Boss, enrage: number) {
@@ -3321,8 +3301,8 @@ function GameScreen({
         enemy.attackClock -= dt;
         if (enemy.mode === 2) {
           enemy.attackClock -= dt;
-          enemy.x += Math.cos(enemy.pulse) * enemy.speed * 3.9 * dt;
-          enemy.y += Math.sin(enemy.pulse) * enemy.speed * 3.9 * dt;
+          enemy.x += Math.cos(enemy.pulse) * enemy.speed * 2.45 * dt;
+          enemy.y += Math.sin(enemy.pulse) * enemy.speed * 2.45 * dt;
           addSharpAfterimage(state, enemy);
           if (enemy.attackClock <= 0) {
             enemy.mode = 3;
@@ -3336,7 +3316,7 @@ function GameScreen({
           enemy.y += side.y * Math.cos(enemy.pulse * 2) * 22 * dt;
           if (enemy.attackClock <= 0) {
             enemy.mode = 0;
-            enemy.attackClock = 1.15 + Math.random() * 0.55;
+            enemy.attackClock = 1.45 + Math.random() * 0.65;
           }
           return;
         }
@@ -3368,8 +3348,8 @@ function GameScreen({
 
         const cutAngle = Math.atan2(toPlayer.y, toPlayer.x);
         const slash = { x: Math.cos(cutAngle + Math.sin(enemy.pulse) * 0.55), y: Math.sin(cutAngle + Math.sin(enemy.pulse) * 0.55) };
-        enemy.x += (toPlayer.x * enemy.speed * 0.42 + slash.x * enemy.speed * 0.38 + side.x * Math.sin(enemy.pulse * 3.2) * 44) * dt;
-        enemy.y += (toPlayer.y * enemy.speed * 0.42 + slash.y * enemy.speed * 0.38 + side.y * Math.cos(enemy.pulse * 3.4) * 44) * dt;
+        enemy.x += (toPlayer.x * enemy.speed * 0.28 + slash.x * enemy.speed * 0.24 + side.x * Math.sin(enemy.pulse * 3.2) * 28) * dt;
+        enemy.y += (toPlayer.y * enemy.speed * 0.28 + slash.y * enemy.speed * 0.24 + side.y * Math.cos(enemy.pulse * 3.4) * 28) * dt;
         if (Math.random() < 0.32) addSharpAfterimage(state, enemy);
         enemy.x = clamp(enemy.x, 34, state.width - 34);
         enemy.y = clamp(enemy.y, 82, state.height - 34);
@@ -4199,27 +4179,11 @@ function drawLostScoreTelegraph(
     ctx.restore();
   }
 
-  if (boss.pattern === 2 || boss.pattern === 4) {
+  if (boss.pattern === 0 || boss.pattern === 2 || boss.pattern === 3 || boss.pattern === 4) {
     const count = 7;
     for (let i = 0; i < count; i += 1) {
       const angle = -Math.PI * 0.82 + (Math.PI * 0.64 * i) / Math.max(1, count - 1);
       drawTelegraphLine(ctx, boss.x, boss.y + boss.radius * 0.42, angle, Math.hypot(state.width, state.height), alpha * 0.68, 8);
-    }
-    if (boss.pattern === 2) return;
-  }
-
-  const diagonal = boss.pattern === 3 || boss.pattern === 4;
-  const count = diagonal ? 6 + enrage : 5 + enrage;
-  const gap = boss.rhythmIndex % count;
-  for (let i = 0; i < count; i += 1) {
-    if (i === gap || (!diagonal && i === (gap + 1) % count)) continue;
-    const t = (i + 0.5) / count;
-    if (diagonal) {
-      const x = state.width * t;
-      drawCenteredTelegraphLine(ctx, x, state.height * 0.48, Math.PI / 2 + (i % 2 === 0 ? 0.22 : -0.22), state.height * 1.2, alpha, 9);
-    } else {
-      const y = 118 + (state.height - 172) * t;
-      drawCenteredTelegraphLine(ctx, state.width / 2, y, Math.sin(boss.rhythmIndex) * 0.06, state.width * 1.08, alpha, 9);
     }
   }
 }
@@ -4380,40 +4344,6 @@ function drawTelegraphLine(
     ctx.lineTo(cx + nx * width * 0.55, cy + ny * width * 0.55);
     ctx.stroke();
   }
-  ctx.restore();
-}
-
-function drawCenteredTelegraphLine(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  angle: number,
-  length: number,
-  alpha: number,
-  width = 10,
-) {
-  const dx = Math.cos(angle) * length * 0.5;
-  const dy = Math.sin(angle) * length * 0.5;
-  ctx.save();
-  ctx.lineCap = "round";
-  ctx.shadowColor = "rgba(255,255,255,0.5)";
-  ctx.shadowBlur = 12;
-  ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.22})`;
-  ctx.lineWidth = width * 1.45;
-  ctx.beginPath();
-  ctx.moveTo(x - dx, y - dy);
-  ctx.lineTo(x + dx, y + dy);
-  ctx.stroke();
-
-  ctx.shadowBlur = 0;
-  ctx.setLineDash([16, 12]);
-  ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.82})`;
-  ctx.lineWidth = Math.max(2, width * 0.18);
-  ctx.beginPath();
-  ctx.moveTo(x - dx, y - dy);
-  ctx.lineTo(x + dx, y + dy);
-  ctx.stroke();
-  ctx.setLineDash([]);
   ctx.restore();
 }
 
