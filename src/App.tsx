@@ -478,6 +478,16 @@ function rotate(v: Vec, angle: number) {
   return { x: v.x * c - v.y * s, y: v.x * s + v.y * c };
 }
 
+function getSharpTipOffsets(radius: number): Vec[] {
+  const lean = radius * 0.2;
+  return [
+    { x: -radius * 0.48 - lean, y: -radius * 1.42 },
+    { x: radius * 0.48 - lean, y: -radius * 1.42 },
+    { x: radius * 0.48 + lean, y: radius * 1.42 },
+    { x: -radius * 0.48 + lean, y: radius * 1.42 },
+  ];
+}
+
 function angleDelta(a: number, b: number) {
   return Math.atan2(Math.sin(a - b), Math.cos(a - b));
 }
@@ -3437,8 +3447,33 @@ function GameScreen({
   }
 
   function fireSharpCut(state: GameState, enemy: Enemy) {
+    const enemyId = enemy.id;
+    getSharpTipOffsets(enemy.radius).forEach((tip, index) => {
+      window.setTimeout(() => {
+        const live = stateRef.current;
+        if (!live || live.gameOver || live.phase !== "combat") return;
+        const source = live.enemies.find((target) => target.id === enemyId);
+        if (!source || source.hp <= 0) return;
+        const offset = rotate(tip, source.pulse);
+        const x = source.x + offset.x;
+        const y = source.y + offset.y;
+        const aim = normalize(live.player.x - x, live.player.y - y);
+        live.hazards.push({
+          id: live.nextId++,
+          x,
+          y,
+          vx: aim.x * 122,
+          vy: aim.y * 122,
+          radius: 4.2,
+          damage: 8 + live.stageIndex,
+          life: 5.4,
+          kind: "orb",
+        });
+        addRipple(live, x, y, 34, "spark");
+        audioRef.current.wavePulse();
+      }, index * 115);
+    });
     addRipple(state, enemy.x, enemy.y, 84, "wave");
-    audioRef.current.wavePulse();
   }
 
   function updateSpecials(
@@ -4859,45 +4894,57 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState, elapsed: n
       ctx.arc(enemy.radius * 0.85, 0, 3, 0, Math.PI * 2);
       ctx.stroke();
     } else if (enemy.kind === 6) {
-      // Sharp: a cut-mark of distorted pitch that rushes through space.
+      // Sharp: keep the musical symbol readable, with distortion only around its edge.
       const r = enemy.radius;
-      const tremor = enemy.mode === 1 ? Math.sin(elapsed * 58) * 2.8 : Math.sin(elapsed * 20 + enemy.pulse) * 1.2;
+      const tremor = enemy.mode === 1 ? Math.sin(elapsed * 42) * 0.9 : Math.sin(elapsed * 16 + enemy.pulse) * 0.45;
+      const attackGlow = enemy.mode === 1 || enemy.mode === 2;
+      const tips = getSharpTipOffsets(r);
       ctx.save();
-      ctx.rotate(enemy.mode === 2 ? enemy.pulse : Math.sin(elapsed * 1.5 + enemy.pulse) * 0.18);
-      ctx.shadowColor = "rgba(255,255,255,0.48)";
-      ctx.shadowBlur = enemy.mode === 1 ? 18 : enemy.mode === 2 ? 15 : 8;
-      ctx.strokeStyle = `rgba(255,255,255,${0.64 + hp * 0.28})`;
-      ctx.lineWidth = 2.2;
+      ctx.rotate(enemy.mode === 2 ? enemy.pulse : Math.sin(elapsed * 1.05 + enemy.pulse) * 0.1);
+      ctx.lineCap = "butt";
+      ctx.lineJoin = "miter";
+      ctx.shadowColor = "rgba(255,255,255,0.44)";
+      ctx.shadowBlur = attackGlow ? 13 : 7;
+      ctx.strokeStyle = `rgba(255,255,255,${0.7 + hp * 0.25})`;
+      ctx.lineWidth = 2.35;
 
-      [-0.34, 0.34].forEach((x) => {
+      [-0.48, 0.48].forEach((x) => {
         ctx.beginPath();
-        ctx.moveTo(x * r * 2 + tremor, -r * 1.25);
-        ctx.lineTo(x * r * 2 - tremor * 0.4, r * 1.25);
+        ctx.moveTo(x * r - r * 0.2 + tremor, -r * 1.42);
+        ctx.lineTo(x * r + r * 0.2 - tremor * 0.35, r * 1.42);
         ctx.stroke();
       });
-      [-0.34, 0.34].forEach((y) => {
+      [-0.38, 0.38].forEach((y) => {
         ctx.beginPath();
-        ctx.moveTo(-r * 1.15, y * r * 2 + tremor * 0.3);
-        ctx.lineTo(r * 1.15, y * r * 2 - tremor);
+        ctx.moveTo(-r * 1.18, y * r + r * 0.18 + tremor * 0.25);
+        ctx.lineTo(r * 1.18, y * r - r * 0.18 - tremor);
         ctx.stroke();
       });
 
-      ctx.strokeStyle = `rgba(255,255,255,${enemy.mode === 1 || enemy.mode === 2 ? 0.46 : 0.18})`;
+      const activeTip = Math.floor((elapsed * 8 + enemy.id) % tips.length);
+      tips.forEach((tip, index) => {
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255,255,255,${attackGlow && index === activeTip ? 0.9 : 0.42})`;
+        ctx.arc(tip.x, tip.y, attackGlow && index === activeTip ? 2.8 : 1.7, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.strokeStyle = `rgba(255,255,255,${attackGlow ? 0.28 : 0.12})`;
       ctx.lineWidth = 1;
-      for (let i = 0; i < 4; i += 1) {
-        const offset = -r * 1.35 + i * r * 0.9;
+      for (let i = 0; i < 5; i += 1) {
+        const offset = -r * 1.28 + i * r * 0.64;
         ctx.beginPath();
-        ctx.moveTo(offset, -r * 1.38 + Math.sin(elapsed * 24 + i) * 3);
-        ctx.lineTo(offset + r * 0.45, r * 1.38 + Math.cos(elapsed * 24 + i) * 3);
+        ctx.moveTo(offset, -r * 1.55 + Math.sin(elapsed * 17 + i) * 2);
+        ctx.lineTo(offset + r * 0.34, -r * 1.18 + Math.cos(elapsed * 13 + i) * 1.5);
         ctx.stroke();
       }
 
-      if (enemy.mode === 1 || enemy.mode === 2) {
+      if (attackGlow) {
         ctx.strokeStyle = "rgba(255,255,255,0.42)";
         ctx.lineWidth = 1.4;
         ctx.beginPath();
-        ctx.moveTo(-r * 1.75, Math.sin(elapsed * 32) * 4);
-        ctx.lineTo(r * 1.75, Math.cos(elapsed * 32) * 4);
+        ctx.moveTo(-r * 1.72, Math.sin(elapsed * 18) * 2.5);
+        ctx.lineTo(r * 1.72, Math.cos(elapsed * 18) * 2.5);
         ctx.stroke();
       }
       ctx.restore();
