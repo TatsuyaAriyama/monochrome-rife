@@ -100,7 +100,7 @@ type Hazard = Vec & {
   radius: number;
   damage: number;
   life: number;
-  kind?: "orb" | "laser" | "wave" | "shockwave" | "scoreline" | "noiseZone";
+  kind?: "orb" | "laser" | "wave" | "shockwave" | "noiseZone";
   angle?: number;
   length?: number;
   width?: number;
@@ -2503,9 +2503,10 @@ function GameScreen({
     const kind = kindPool[Math.floor(Math.random() * kindPool.length)];
     const radius = kind === 6 ? 16 : 11 + Math.min(kind, 4) * 2;
     const difficulty = stage.enemyLevel + (state.runLoop - 1) * 0.65;
+    const movementDifficulty = state.stageIndex === 3 ? STAGES[0].enemyLevel + (state.runLoop - 1) * 0.65 : difficulty;
     const baseHp = 22 + difficulty * 10 + Math.min(kind, 4) * 7;
     const hp = kind === 3 ? baseHp * 2.64 : kind === 6 ? baseHp * 1.15 : baseHp;
-    const speedBoost = kind === 3 ? 26 : kind === 4 ? 92 : kind === 5 ? 38 : kind === 6 ? 38 : 0;
+    const speedBoost = kind === 3 ? 26 : kind === 4 ? 92 : kind === 5 ? 38 : 0;
     state.enemies.push({
       id: state.nextId++,
       x,
@@ -2513,7 +2514,7 @@ function GameScreen({
       radius,
       hp,
       maxHp: hp,
-      speed: 48 + difficulty * 13 + speedBoost + Math.random() * 24,
+      speed: 48 + movementDifficulty * 13 + speedBoost + Math.random() * 24,
       damage: 9 + Math.min(kind, 4) * 2 + state.stageIndex,
       kind,
       pulse: Math.random() * Math.PI * 2,
@@ -3022,33 +3023,6 @@ function GameScreen({
     audioRef.current.wavePulse();
   }
 
-  function spawnScoreLine(
-    state: GameState,
-    x: number,
-    y: number,
-    angle: number,
-    length: number,
-    width: number,
-    damage: number,
-    life: number,
-    speed = 0,
-  ) {
-    state.hazards.push({
-      id: state.nextId++,
-      x,
-      y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      radius: width / 2,
-      damage,
-      life,
-      kind: "scoreline",
-      angle,
-      length,
-      width,
-    });
-  }
-
   function spawnNoiseZone(state: GameState, x: number, y: number, radius: number, life: number) {
     state.hazards.push({
       id: state.nextId++,
@@ -3433,8 +3407,6 @@ function GameScreen({
   }
 
   function fireSharpCut(state: GameState, enemy: Enemy) {
-    const aim = enemy.pulse;
-    spawnScoreLine(state, enemy.x, enemy.y, aim, 260, 5.5, 10, 1.05, 96);
     addRipple(state, enemy.x, enemy.y, 84, "wave");
     audioRef.current.wavePulse();
   }
@@ -3572,8 +3544,6 @@ function GameScreen({
           ? laserHitsPlayer(hazard, state.player)
           : hazard.kind === "shockwave"
             ? shockwaveHitsPlayer(hazard, state.player)
-            : hazard.kind === "scoreline"
-              ? scoreLineHitsPlayer(hazard, state.player)
             : distance(state.player, hazard) <= state.player.radius + hazard.radius;
       if (hit) {
         damagePlayer(state, hazard.damage);
@@ -3581,17 +3551,6 @@ function GameScreen({
         return;
       }
     }
-  }
-
-  function scoreLineHitsPlayer(hazard: Hazard, player: Player) {
-    const angle = hazard.angle ?? 0;
-    const length = hazard.length ?? 0;
-    const width = hazard.width ?? hazard.radius * 2;
-    const dx = player.x - hazard.x;
-    const dy = player.y - hazard.y;
-    const along = dx * Math.cos(angle) + dy * Math.sin(angle);
-    const perpendicular = Math.abs(-dx * Math.sin(angle) + dy * Math.cos(angle));
-    return Math.abs(along) <= length / 2 + player.radius * 0.45 && perpendicular <= width / 2 + player.radius * 0.72;
   }
 
   function shockwaveHitsPlayer(hazard: Hazard, player: Player) {
@@ -4506,10 +4465,6 @@ function drawHazards(ctx: CanvasRenderingContext2D, state: GameState) {
       drawShockwaveHazard(ctx, hazard);
       continue;
     }
-    if (hazard.kind === "scoreline") {
-      drawScoreLineHazard(ctx, hazard);
-      continue;
-    }
     if (hazard.kind === "noiseZone") {
       drawNoiseZone(ctx, hazard);
       continue;
@@ -4523,43 +4478,6 @@ function drawHazards(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.quadraticCurveTo(hazard.x, hazard.y - 8, hazard.x + 5, hazard.y);
     ctx.stroke();
   }
-}
-
-function drawScoreLineHazard(ctx: CanvasRenderingContext2D, hazard: Hazard) {
-  const angle = hazard.angle ?? 0;
-  const length = hazard.length ?? 160;
-  const width = hazard.width ?? 8;
-  const fade = clamp(hazard.life / 0.24, 0, 1);
-
-  ctx.save();
-  ctx.translate(hazard.x, hazard.y);
-  ctx.rotate(angle);
-  ctx.lineCap = "round";
-  ctx.shadowColor = "rgba(255,255,255,0.36)";
-  ctx.shadowBlur = 10;
-  ctx.strokeStyle = `rgba(255,255,255,${0.36 * fade})`;
-  ctx.lineWidth = width;
-  ctx.beginPath();
-  ctx.moveTo(-length / 2, 0);
-  ctx.lineTo(length / 2, Math.sin(hazard.life * 11 + hazard.id) * 2);
-  ctx.stroke();
-
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = `rgba(255,255,255,${0.82 * fade})`;
-  ctx.lineWidth = 1.2;
-  for (let i = -2; i <= 2; i += 1) {
-    const y = i * 4;
-    ctx.beginPath();
-    for (let step = 0; step <= 8; step += 1) {
-      const t = step / 8;
-      const x = -length / 2 + t * length;
-      const wave = Math.sin(t * Math.PI * 2 + hazard.life * 9 + i) * 1.5;
-      if (step === 0) ctx.moveTo(x, y + wave);
-      else ctx.lineTo(x, y + wave);
-    }
-    ctx.stroke();
-  }
-  ctx.restore();
 }
 
 function drawNoiseZone(ctx: CanvasRenderingContext2D, hazard: Hazard) {
